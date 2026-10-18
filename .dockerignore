@@ -1,0 +1,22 @@
+# Everything listed here never reaches the Docker build context.
+# Dependencies and build output are always rebuilt inside the image, for Linux.
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+**/next-env.d.ts
+
+# Not needed to build any image
+.git
+.github
+docs
+deploy
+**/*.log
+**/.DS_Store
+
+# Secrets must never be baked into an image
+**/.env
+**/.env.*
+!**/.env.example

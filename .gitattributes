@@ -1,0 +1,8 @@
+# Store every text file with LF line endings, even when edited on Windows.
+# Shell scripts and Dockerfiles with CRLF endings break inside Linux containers.
+* text=auto eol=lf
+
+*.ico binary
+*.png binary
+*.jpg binary
+*.woff2 binary

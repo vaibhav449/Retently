@@ -1,0 +1,29 @@
+# Private planning docs and learning notes: kept on your machine, never committed
+docs/
+
+# Dependencies
+node_modules/
+
+# Build output and caches
+.next/
+dist/
+out/
+coverage/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# Environment files (only the examples are committed)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

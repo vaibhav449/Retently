@@ -1,0 +1,100 @@
+# Production stack on the VM. The deploy workflow copies this file to $APP_DIR and runs deploy.sh.
+# Only Caddy publishes ports. Postgres and RabbitMQ are reachable only inside this Docker network.
+name: study-workspace
+
+x-app: &app
+  restart: unless-stopped
+  init: true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+      realtime:
+        condition: service_healthy
+
+  web:
+    <<: *app
+    image: ${IMAGE_PREFIX:?set IMAGE_PREFIX in .env}-web:${IMAGE_TAG:-latest}
+
+  realtime:
+    <<: *app
+    image: ${IMAGE_PREFIX:?set IMAGE_PREFIX in .env}-realtime:${IMAGE_TAG:-latest}
+
+  worker:
+    <<: *app
+    image: ${IMAGE_PREFIX:?set IMAGE_PREFIX in .env}-worker:${IMAGE_TAG:-latest}
+    environment:
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:?}:${RABBITMQ_PASSWORD:?}@rabbitmq:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  # One-off job, not a long-running service. deploy.sh runs it before starting the apps.
+  migrate:
+    image: ${IMAGE_PREFIX:?set IMAGE_PREFIX in .env}-migrate:${IMAGE_TAG:-latest}
+    profiles: ["tools"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    shm_size: 256mb
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    restart: unless-stopped
+    # RabbitMQ keys its data directory on the hostname. A fixed one keeps queues across container recreation.
+    hostname: rabbitmq
+    # Dashboard bound to the VM's localhost only. Open it through an SSH tunnel, never publicly.
+    ports:
+      - "127.0.0.1:15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in .env}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env}
+    volumes:
+      - rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+volumes:
+  pgdata:
+  rabbitmq:
+  caddy_data:
+  caddy_config:

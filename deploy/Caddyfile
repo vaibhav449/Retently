@@ -1,0 +1,13 @@
+# SITE_ADDRESS is a domain (Caddy fetches an HTTPS certificate automatically)
+# or ":80" to serve plain HTTP on the VM's IP address.
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	handle /events* {
+		reverse_proxy realtime:4000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}
