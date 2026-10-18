@@ -1,8 +1,9 @@
-# Private planning docs and learning notes: kept on your machine, never committed
-docs/
+# Local personal notes; shared project documentation in packages/docs is versioned
+/docs/
 
 # Dependencies
 node_modules/
+packages/db/src/generated/
 
 # Build output and caches
 .next/

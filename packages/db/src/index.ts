@@ -1,12 +1,11 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
-import * as schema from "./schema";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "./generated/prisma/client";
 
 export function createDb(url: string) {
-  const client = postgres(url);
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
   return {
-    db: drizzle(client, { schema }),
-    close: () => client.end(),
+    db,
+    close: () => db.$disconnect(),
   };
 }
 

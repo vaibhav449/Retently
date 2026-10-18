@@ -12,14 +12,14 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "zod": "catalog:"
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "@repo/eslint-config": "workspace:*",
-    "@repo/typescript-config": "workspace:*",
-    "eslint": "catalog:",
-    "typescript": "catalog:",
-    "vite": "catalog:",
-    "vitest": "catalog:"
+    "@repo/eslint-config": "*",
+    "@repo/typescript-config": "*",
+    "eslint": "9.39.5",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
   }
 }

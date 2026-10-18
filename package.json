@@ -1,9 +1,10 @@
 {
   "name": "study-workspace",
   "private": true,
-  "packageManager": "pnpm@10.19.0",
+  "packageManager": "npm@11.17.0",
   "engines": {
-    "node": ">=24.11.0"
+    "node": ">=24.11.0",
+    "npm": ">=11"
   },
   "scripts": {
     "dev": "turbo run dev",
@@ -16,10 +17,18 @@
     "format:check": "prettier --check .",
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down",
-    "db:migrate": "pnpm --filter @repo/db migrate"
+    "db:migrate": "npm run migrate --workspace @repo/db",
+    "postinstall": "npm run generate --workspaces --if-present",
+    "db:generate": "npm run generate --workspace @repo/db",
+    "db:migrate:dev": "npm run migrate:dev --workspace @repo/db --",
+    "db:studio": "npm run studio --workspace @repo/db"
   },
   "devDependencies": {
     "prettier": "3.9.10",
     "turbo": "2.11.9"
-  }
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
 }

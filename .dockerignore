@@ -1,6 +1,7 @@
 # Everything listed here never reaches the Docker build context.
 # Dependencies and build output are always rebuilt inside the image, for Linux.
 **/node_modules
+**/src/generated
 **/.next
 **/dist
 **/.turbo

@@ -1,47 +1,44 @@
 # syntax=docker/dockerfile:1
-# Build from the repo root:  docker build -f apps/worker/Dockerfile -t worker .
+# Build from the repo root: docker build -f apps/worker/Dockerfile -t worker .
 
 ARG NODE_VERSION=24.21.0
 
-# ---- base: Node + pnpm, shared by every build stage ----
 FROM node:${NODE_VERSION}-alpine AS base
-ARG PNPM_VERSION=10.19.0
-ENV PNPM_HOME=/pnpm \
-    PATH=/pnpm:$PATH \
-    TURBO_TELEMETRY_DISABLED=1
-RUN npm install --global --no-update-notifier pnpm@${PNPM_VERSION}
+ARG NPM_VERSION=11.17.0
+ENV TURBO_TELEMETRY_DISABLED=1
+RUN npm install --global --no-update-notifier npm@${NPM_VERSION}
 WORKDIR /app
 
-# ---- pruner: cut the monorepo down to this app and its workspace packages ----
 FROM base AS pruner
 ARG TURBO_VERSION=2.11.9
 RUN npm install --global --no-update-notifier turbo@${TURBO_VERSION}
 COPY . .
 RUN turbo prune @repo/worker --docker
 
-# ---- deps: install all dependencies. Cached until a package.json or the lockfile changes ----
+# Include sources before installation so workspace generation scripts can run.
 FROM base AS deps
 COPY --from=pruner /app/out/json/ .
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile --store-dir=/pnpm/store
-
-# ---- builder: bundle TypeScript into apps/worker/dist ----
-FROM deps AS builder
 COPY --from=pruner /app/out/full/ .
-RUN pnpm turbo run build --filter=@repo/worker
+RUN --mount=type=cache,id=npm-cache,target=/root/.npm npm ci
 
-# ---- prod-deps: only this app's runtime dependencies (no dev tools, no workspace packages) ----
+FROM deps AS builder
+RUN npm exec -- turbo run build --filter=@repo/worker
+
+# Install runtime dependencies for this app; local TypeScript packages are bundled.
 FROM base AS prod-deps
 COPY --from=pruner /app/out/json/ .
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile --prod --filter=@repo/worker --store-dir=/pnpm/store
+# Restrict membership so npm excludes the shared tooling packages' runtime dependencies.
+RUN npm pkg set 'workspaces[0]=apps/worker' \
+    && npm pkg delete 'workspaces[1]'
+RUN --mount=type=cache,id=npm-cache,target=/root/.npm \
+    npm ci --omit=dev --ignore-scripts --workspace @repo/worker
 
-# ---- runner: the image that ships. No pnpm, no source, no compilers ----
+# Runtime image
 FROM node:${NODE_VERSION}-alpine AS runner
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=prod-deps /app/apps/worker/node_modules ./apps/worker/node_modules
+COPY --from=prod-deps /app/apps/worker/ ./apps/worker/
 COPY --from=builder /app/apps/worker/package.json ./apps/worker/package.json
 COPY --from=builder /app/apps/worker/dist ./apps/worker/dist
 USER node

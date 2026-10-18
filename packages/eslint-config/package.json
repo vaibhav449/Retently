@@ -8,10 +8,10 @@
     "./next": "./next.js"
   },
   "dependencies": {
-    "@eslint/js": "catalog:",
-    "eslint-config-next": "catalog:",
-    "globals": "catalog:",
-    "typescript-eslint": "catalog:"
+    "@eslint/js": "9.39.5",
+    "eslint-config-next": "16.4.2",
+    "globals": "17.13.0",
+    "typescript-eslint": "8.71.2"
   },
   "peerDependencies": {
     "eslint": "^9"

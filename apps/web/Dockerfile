@@ -1,37 +1,31 @@
 # syntax=docker/dockerfile:1
-# Build from the repo root:  docker build -f apps/web/Dockerfile -t web .
+# Build from the repo root: docker build -f apps/web/Dockerfile -t web .
 
 ARG NODE_VERSION=24.21.0
 
-# ---- base: Node + pnpm, shared by every build stage ----
 FROM node:${NODE_VERSION}-alpine AS base
-ARG PNPM_VERSION=10.19.0
-ENV PNPM_HOME=/pnpm \
-    PATH=/pnpm:$PATH \
-    TURBO_TELEMETRY_DISABLED=1 \
+ARG NPM_VERSION=11.17.0
+ENV TURBO_TELEMETRY_DISABLED=1 \
     NEXT_TELEMETRY_DISABLED=1
-RUN npm install --global --no-update-notifier pnpm@${PNPM_VERSION}
+RUN npm install --global --no-update-notifier npm@${NPM_VERSION}
 WORKDIR /app
 
-# ---- pruner: cut the monorepo down to this app and its workspace packages ----
 FROM base AS pruner
 ARG TURBO_VERSION=2.11.9
 RUN npm install --global --no-update-notifier turbo@${TURBO_VERSION}
 COPY . .
 RUN turbo prune @repo/web --docker
 
-# ---- deps: install all dependencies. Cached until a package.json or the lockfile changes ----
+# Include sources before installation so workspace generation scripts can run.
 FROM base AS deps
 COPY --from=pruner /app/out/json/ .
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile --store-dir=/pnpm/store
-
-# ---- builder: `next build` writes a self-contained server to .next/standalone ----
-FROM deps AS builder
 COPY --from=pruner /app/out/full/ .
-RUN pnpm turbo run build --filter=@repo/web
+RUN --mount=type=cache,id=npm-cache,target=/root/.npm npm ci
 
-# ---- runner: standalone output only. It already contains the node_modules it needs ----
+FROM deps AS builder
+RUN npm exec -- turbo run build --filter=@repo/web
+
+# Runtime image
 FROM node:${NODE_VERSION}-alpine AS runner
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \

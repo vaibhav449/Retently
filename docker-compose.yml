@@ -1,4 +1,4 @@
-# Local development infrastructure only. The apps run on your machine with `pnpm dev`.
+# Local development infrastructure only. The apps run on your machine with `npm run dev`.
 name: study-workspace-dev
 
 services:

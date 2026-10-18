@@ -1,2 +1,2 @@
-pnpm-lock.yaml
-packages/db/drizzle/meta/
+package-lock.json
+packages/db/src/generated/

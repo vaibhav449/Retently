@@ -23,14 +23,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v6
-
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-          cache: pnpm
+          cache: npm
 
-      - run: pnpm install --frozen-lockfile
+      - run: npm install --global npm@11.17.0
+
+      - run: npm ci
 
       - name: Restore Turborepo cache
         uses: actions/cache@v6
@@ -39,9 +39,9 @@ jobs:
           key: turbo-${{ runner.os }}-${{ github.sha }}
           restore-keys: turbo-${{ runner.os }}-
 
-      - run: pnpm format:check
+      - run: npm run format:check
 
-      - run: pnpm turbo run lint typecheck test build
+      - run: npm exec -- turbo run lint typecheck test build
 
   migrations:
     name: Migrations apply cleanly
@@ -66,16 +66,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v6
-
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-          cache: pnpm
+          cache: npm
 
-      - run: pnpm install --frozen-lockfile
+      - run: npm install --global npm@11.17.0
 
-      - run: pnpm db:migrate
+      - run: npm ci
+
+      - run: npm run db:migrate
 
       - name: Run again to prove migrations are idempotent
-        run: pnpm db:migrate
+        run: npm run db:migrate

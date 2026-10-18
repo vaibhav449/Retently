@@ -3,7 +3,7 @@
   "ui": "tui",
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "generate", "^generate"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "transit": {
@@ -13,7 +13,7 @@
       "dependsOn": ["transit"]
     },
     "typecheck": {
-      "dependsOn": ["transit"]
+      "dependsOn": ["transit", "generate", "^generate"]
     },
     "test": {
       "dependsOn": ["transit"]
@@ -21,6 +21,9 @@
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "generate": {
+      "outputs": ["src/generated/**"]
     }
   }
 }

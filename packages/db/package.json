@@ -7,24 +7,24 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsup",
-    "migrate": "tsx --env-file-if-exists=../../.env src/migrate.ts",
-    "generate": "drizzle-kit generate",
+    "generate": "prisma generate",
+    "migrate": "prisma migrate deploy",
+    "migrate:dev": "prisma migrate dev",
+    "studio": "prisma studio",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "drizzle-orm": "catalog:",
-    "postgres": "catalog:"
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "pg": "8.16.3"
   },
   "devDependencies": {
-    "@repo/eslint-config": "workspace:*",
-    "@repo/typescript-config": "workspace:*",
-    "@types/node": "catalog:",
-    "drizzle-kit": "catalog:",
-    "eslint": "catalog:",
-    "tsup": "catalog:",
-    "tsx": "catalog:",
-    "typescript": "catalog:"
+    "@repo/eslint-config": "*",
+    "@repo/typescript-config": "*",
+    "@types/node": "24.19.2",
+    "eslint": "9.39.5",
+    "typescript": "6.0.3",
+    "prisma": "7.10.1"
   }
 }

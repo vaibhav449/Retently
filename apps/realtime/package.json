@@ -12,20 +12,20 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "ws": "catalog:",
-    "zod": "catalog:"
+    "ws": "8.22.0",
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "@repo/contracts": "workspace:*",
-    "@repo/eslint-config": "workspace:*",
-    "@repo/typescript-config": "workspace:*",
-    "@types/node": "catalog:",
-    "@types/ws": "catalog:",
-    "eslint": "catalog:",
-    "tsup": "catalog:",
-    "tsx": "catalog:",
-    "typescript": "catalog:",
-    "vite": "catalog:",
-    "vitest": "catalog:"
+    "@repo/contracts": "*",
+    "@repo/eslint-config": "*",
+    "@repo/typescript-config": "*",
+    "@types/node": "24.19.2",
+    "@types/ws": "8.18.2",
+    "eslint": "9.39.5",
+    "tsup": "8.5.1",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
   }
 }
