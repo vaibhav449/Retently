@@ -7,4 +7,246 @@ datasource db {
   provider = "postgresql"
 }
 
-// Add application models here as features are introduced.
+// Phase 1 contract (build-plan.md §7.1, task-distribution.md Phase 0).
+// Fields are camelCase in TypeScript and snake_case in Postgres via @map.
+// Jointly owned: changes to this file need both developers' approval.
+//
+// Deferred to later phases on purpose:
+//   documents.yjs_state, document_access          → Phase 2 (collaboration)
+//   chunks.embedding                              → Phase 2 (embedding model not chosen; its size is baked into the column)
+//   topics, items.topic_id, chunks.topic_id       → Phase 3
+//   card_state                                    → Vaibhav, Phase 1 (his table, his PR)
+
+// ─── Auth (Better Auth core schema + our two extra fields) ───────────────────
+
+model User {
+  id              String    @id
+  name            String
+  email           String    @unique
+  emailVerified   Boolean   @default(false) @map("email_verified")
+  image           String?
+  /// Collected at signup. Under-18 handling follows build-plan.md §11.3.
+  dob             DateTime  @db.Date
+  parentConsentAt DateTime? @map("parent_consent_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  sessions  Session[]
+  accounts  Account[]
+  documents Document[]
+  sources   Source[]
+  reviews   ReviewLog[]
+  llmUsage  LlmUsage[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id
+  userId                String    @map("user_id")
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+// ─── Workspace (Anurag) ──────────────────────────────────────────────────────
+
+model Document {
+  id          String   @id @default(uuid()) @db.Uuid
+  ownerId     String   @map("owner_id")
+  title       String   @default("Untitled")
+  /// TipTap JSON. Temporary until Yjs replaces it in Phase 2.
+  contentJson Json?    @map("content_json")
+  /// Markdown kept in sync by the editor. Ingestion reads only this, never the editor state.
+  contentMd   String   @default("") @map("content_md")
+  /// Bumped on every save; part of the document.changed hand-off.
+  version     Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  owner  User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  source Source?
+
+  @@index([ownerId])
+  @@map("documents")
+}
+
+// ─── Content pipeline (Anurag) ───────────────────────────────────────────────
+
+enum SourceKind {
+  note
+  pdf
+}
+
+model Source {
+  id         String     @id @default(uuid()) @db.Uuid
+  ownerId    String     @map("owner_id")
+  kind       SourceKind
+  /// Set when kind = note.
+  documentId String?    @unique @map("document_id") @db.Uuid
+  /// Object-storage key. Set when kind = pdf.
+  fileKey    String?    @map("file_key")
+  title      String
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  owner    User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  document Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunks   Chunk[]
+
+  @@index([ownerId])
+  @@map("sources")
+}
+
+model Chunk {
+  id          String    @id @default(uuid()) @db.Uuid
+  sourceId    String    @map("source_id") @db.Uuid
+  /// Stable editor block ids this chunk covers (notes only).
+  blockIds    String[]  @map("block_ids")
+  /// PDF pages this chunk covers (PDFs only).
+  pageStart   Int?      @map("page_start")
+  pageEnd     Int?      @map("page_end")
+  text        String
+  /// Hash of the normalised text. Items are generated once per hash.
+  contentHash String    @map("content_hash")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  /// Set instead of deleting, so old items and reviews keep their citation.
+  retiredAt   DateTime? @map("retired_at")
+
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  items  Item[]
+
+  @@index([sourceId, contentHash])
+  @@map("chunks")
+}
+
+// ─── Shared: items and reviews ───────────────────────────────────────────────
+
+enum ItemType {
+  mcq
+  cloze
+  short_answer
+}
+
+/// Items belong to content, not to a user (build-plan.md §7.3).
+/// Each user's memory of an item lives in card_state.
+model Item {
+  id             String    @id @default(uuid()) @db.Uuid
+  sourceChunkId  String    @map("source_chunk_id") @db.Uuid
+  type           ItemType
+  prompt         String
+  /// MCQ: the correct option's text (must be one of `options`). Cloze: the hidden text.
+  /// Short answer: a model answer.
+  answer         String
+  /// MCQ only, already shuffled. Empty for other types.
+  options        String[]
+  /// Short answer only.
+  rubric         String?
+  difficultySeed Float?    @map("difficulty_seed")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  retiredAt      DateTime? @map("retired_at")
+
+  sourceChunk Chunk       @relation(fields: [sourceChunkId], references: [id], onDelete: Cascade)
+  reviews     ReviewLog[]
+
+  @@index([sourceChunkId])
+  @@map("items")
+}
+
+enum Confidence {
+  sure
+  think_so
+  no_idea
+}
+
+enum ReviewContext {
+  solo
+  duel
+}
+
+/// Append-only. Written only by recordReview() in packages/revision.
+model ReviewLog {
+  id               String        @id @default(uuid()) @db.Uuid
+  itemId           String        @map("item_id") @db.Uuid
+  userId           String        @map("user_id")
+  reviewedAt       DateTime      @default(now()) @map("reviewed_at")
+  /// FSRS grade: 1 Again, 2 Hard, 3 Good, 4 Easy.
+  grade            Int           @db.SmallInt
+  /// Null for duel answers (build-plan.md §11.2).
+  confidence       Confidence?
+  correct          Boolean
+  /// What the user answered, so a misconception can say "you answered X".
+  response         String?
+  latencyMs        Int           @map("latency_ms")
+  /// Days since this user's previous review of the item. Null on the first review.
+  elapsedDays      Float?        @map("elapsed_days")
+  context          ReviewContext @default(solo)
+  schedulerVersion String        @map("scheduler_version")
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, reviewedAt])
+  @@index([itemId, userId])
+  @@map("review_log")
+}
+
+// ─── LLM cost tracking ───────────────────────────────────────────────────────
+
+/// One row per LLM call, written by packages/llm. Also drives the daily budget check.
+model LlmUsage {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id")
+  /// e.g. "item_generation", "ghost_text", "chat", "grading"
+  feature      String
+  model        String
+  inputTokens  Int      @map("input_tokens")
+  outputTokens Int      @map("output_tokens")
+  costUsd      Decimal  @map("cost_usd") @db.Decimal(12, 6)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("llm_usage")
+}
