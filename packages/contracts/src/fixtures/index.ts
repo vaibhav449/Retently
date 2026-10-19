@@ -5,6 +5,7 @@
  */
 import type { Citation } from "../citation";
 import type { ClozeItem, McqItem, ShortAnswerItem } from "../item";
+import type { RealtimeTokenResponse } from "../realtime";
 import type { ReviewAnswerRequest, ReviewAnswerResponse, ReviewNextResponse } from "../review";
 import type { WsEnvelope } from "../ws";
 
@@ -106,4 +107,9 @@ export const wsEnvelopeFixture: WsEnvelope = {
   type: "ingest.completed",
   payload: { source_id: PDF_SOURCE_ID, items_created: 42 },
   request_id: "req_01",
+};
+
+export const realtimeTokenResponseFixture: RealtimeTokenResponse = {
+  token: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyXzEifQ.signature",
+  expires_in: 300,
 };
