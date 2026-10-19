@@ -3,6 +3,7 @@ import type { z } from "zod";
 import { citationSchema } from "./citation";
 import * as fixtures from "./fixtures";
 import { itemSchema, mcqItemSchema } from "./item";
+import { realtimeTokenResponseSchema } from "./realtime";
 import {
   reviewAnswerRequestSchema,
   reviewAnswerResponseSchema,
@@ -23,6 +24,11 @@ const cases: [string, z.ZodType, unknown][] = [
   ["reviewAnswerWrongFixture", reviewAnswerResponseSchema, fixtures.reviewAnswerWrongFixture],
   ["reviewAnswerCorrectFixture", reviewAnswerResponseSchema, fixtures.reviewAnswerCorrectFixture],
   ["wsEnvelopeFixture", wsEnvelopeSchema, fixtures.wsEnvelopeFixture],
+  [
+    "realtimeTokenResponseFixture",
+    realtimeTokenResponseSchema,
+    fixtures.realtimeTokenResponseFixture,
+  ],
 ];
 
 describe("fixtures", () => {
