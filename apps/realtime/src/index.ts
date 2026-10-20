@@ -2,7 +2,7 @@ import { loadEnv } from "./env";
 import { createRealtimeServer } from "./server";
 
 const env = loadEnv();
-const realtime = createRealtimeServer();
+const realtime = createRealtimeServer({ tokenSecret: env.REALTIME_TOKEN_SECRET });
 
 realtime.server.on("error", (error: NodeJS.ErrnoException) => {
   console.error(
