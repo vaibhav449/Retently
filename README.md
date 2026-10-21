@@ -20,6 +20,7 @@ npm run dev           # web on :3000, realtime on :4000, worker
 
 - RabbitMQ dashboard: http://localhost:15672 (user `app`, password `app`)
 - If port 4000 is taken on your machine, add `PORT=4100` (or any free port) to `.env`.
+- `npm run check` needs no database. `npm run test:integration` runs the tests that need Postgres (after `npm run infra:up`); each run creates and drops its own database.
 
 ## Workspace structure
 

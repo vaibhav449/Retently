@@ -18,6 +18,11 @@
     "test": {
       "dependsOn": ["transit"]
     },
+    "test:integration": {
+      "dependsOn": ["transit", "generate", "^generate"],
+      "cache": false,
+      "passThroughEnv": ["DATABASE_URL"]
+    },
     "dev": {
       "cache": false,
       "persistent": true
