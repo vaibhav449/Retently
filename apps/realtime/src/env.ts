@@ -3,6 +3,8 @@ import { z } from "zod";
 const envSchema = z.object({
   HOST: z.string().min(1).default("0.0.0.0"),
   PORT: z.coerce.number().int().positive().default(4000),
+  /** Shared with apps/web, which signs the tokens this server verifies. */
+  REALTIME_TOKEN_SECRET: z.string().min(32),
 });
 
 export type Env = z.infer<typeof envSchema>;

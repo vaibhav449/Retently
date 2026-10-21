@@ -25,23 +25,23 @@ npm run dev           # web on :3000, realtime on :4000, worker
 
 The root `package.json` declares npm workspaces for `apps/*` and `packages/*`. Run installs from the repository root: npm installs dependencies and links local packages such as `@repo/contracts`. Each workspace has its own `package.json`; the root `package-lock.json` records resolved dependencies for the whole repo. Use `npm ci` for a clean install from that lockfile.
 
-Turborepo coordinates the workspace scripts and caches eligible results. The applications are currently skeletons: the web app has a placeholder page, realtime echoes validated messages, and the worker connects to RabbitMQ without consuming jobs. Authentication, application tables, AI processing, collaboration, and study features are planned.
+Turborepo coordinates the workspace scripts and caches eligible results. The applications are currently skeletons: the web app has a placeholder page, realtime echoes validated messages on sockets opened with a valid realtime token, and the worker connects to RabbitMQ without consuming jobs. Authentication, application tables, AI processing, collaboration, and study features are planned.
 
 The [project documentation index](packages/docs/README.md) describes the current implementation and links to the build plan, task distribution, and product specifications.
 
 ## What's inside
 
-| Path                         | What it is                                                     |
-| ---------------------------- | -------------------------------------------------------------- |
-| `apps/web`                   | Next.js 16 app (App Router, Tailwind 4)                        |
-| `apps/realtime`              | HTTP + WebSocket server: `/health`, and `/events` for messages |
-| `apps/worker`                | Background worker connected to RabbitMQ                        |
-| `packages/contracts`         | Zod schemas shared by every app                                |
-| `packages/db`                | Prisma client, schema, and SQL migrations                      |
-| `packages/eslint-config`     | Shared ESLint rules                                            |
-| `packages/typescript-config` | Shared `tsconfig` presets                                      |
-| `deploy/`                    | Production Compose stack, Caddyfile, VM scripts                |
-| `docker-compose.yml`         | Local Postgres and RabbitMQ for development                    |
+| Path                         | What it is                                                      |
+| ---------------------------- | --------------------------------------------------------------- |
+| `apps/web`                   | Next.js 16 app (App Router, Tailwind 4)                         |
+| `apps/realtime`              | HTTP + WebSocket server: `/health`, and token-checked `/events` |
+| `apps/worker`                | Background worker connected to RabbitMQ                         |
+| `packages/contracts`         | Zod schemas shared by every app                                 |
+| `packages/db`                | Prisma client, schema, and SQL migrations                       |
+| `packages/eslint-config`     | Shared ESLint rules                                             |
+| `packages/typescript-config` | Shared `tsconfig` presets                                       |
+| `deploy/`                    | Production Compose stack, Caddyfile, VM scripts                 |
+| `docker-compose.yml`         | Local Postgres and RabbitMQ for development                     |
 
 ## Commands
 
