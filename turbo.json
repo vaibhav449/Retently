@@ -18,6 +18,10 @@
     "test": {
       "dependsOn": ["transit"]
     },
+    "test:integration": {
+      "dependsOn": ["transit", "generate", "^generate"],
+      "cache": false
+    },
     "dev": {
       "cache": false,
       "persistent": true
