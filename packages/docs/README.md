@@ -8,18 +8,20 @@ The repository is one Git repository containing three applications and shared pa
 
 The repo pins npm 11.17.0 and Node 24.21.0 (in `.nvmrc`). Turborepo coordinates development, builds, linting, typechecking, and tests; it also generates the Prisma client before dependent builds and typechecks.
 
-| Path                             | Implemented today                                                                                                                                                              |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `apps/web`                       | Next.js 16, React 19, Tailwind 4, a placeholder home page, and `/api/health`                                                                                                   |
-| `apps/realtime`                  | Node HTTP server, `/health`, and a validated WebSocket echo endpoint at `/events` that requires a realtime token (401 without one); connection heartbeat and shutdown handling |
-| `apps/worker`                    | RabbitMQ connection with startup retries, `/health`, and shutdown handling                                                                                                     |
-| `packages/contracts`             | Zod schemas and TypeScript types for health responses and WebSocket envelopes; validation tests                                                                                |
-| `packages/db`                    | Prisma ORM 7.10.1, PostgreSQL adapter, `createDb(url)` with `close()`, client generation, and SQL migrations                                                                   |
-| `packages/eslint-config`         | Shared ESLint presets                                                                                                                                                          |
-| `packages/typescript-config`     | Shared strict TypeScript presets for Node and Next.js                                                                                                                          |
-| `.github/workflows` and `deploy` | CI, container builds, and VM deployment configuration; configuration alone does not establish that a deployment is running                                                     |
+| Path                             | Implemented today                                                                                                                                                                                         |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`                       | Next.js 16, React 19, Tailwind 4, a placeholder home page, and `/api/health`                                                                                                                              |
+| `apps/realtime`                  | Node HTTP server, `/health`, and a validated WebSocket echo endpoint at `/events` that requires a realtime token (401 without one); connection heartbeat and shutdown handling                            |
+| `apps/worker`                    | RabbitMQ connection with startup retries, `/health`, and shutdown handling                                                                                                                                |
+| `packages/contracts`             | Zod schemas and TypeScript types for health responses and WebSocket envelopes; validation tests                                                                                                           |
+| `packages/db`                    | Prisma ORM 7.10.1, PostgreSQL adapter, `createDb(url)` with `close()`, client generation, and SQL migrations                                                                                              |
+| `packages/eslint-config`         | Shared ESLint presets                                                                                                                                                                                     |
+| `packages/revision`              | `mapGrade`: confidence × correctness × speed → FSRS grade (mapping `spec-v1`), with a test for every row of the grading table                                                                             |
+| `packages/scheduler`             | Pure `Scheduler` interface and types, `placeholder-v0` (every item due one day after its review, R = 0.9^t), a version registry, and lint rules and tests that keep it free of clocks, randomness and I/O |
+| `packages/typescript-config`     | Shared strict TypeScript presets for Node and Next.js                                                                                                                                                     |
+| `.github/workflows` and `deploy` | CI, container builds, and VM deployment configuration; configuration alone does not establish that a deployment is running                                                                                |
 
-The worker does not consume jobs yet. The web app does not connect to the realtime service or database yet. Authentication, application tables, uploads, AI processing, collaboration, revision scheduling, and duels remain planned. `scheduler`, `revision`, `ingest`, `llm`, and the evaluation harness are also planned packages.
+The worker does not consume jobs yet. The web app does not connect to the realtime service or database yet. Authentication, application tables, uploads, AI processing, collaboration, revision scheduling, and duels remain planned. `ingest`, `llm`, and the evaluation harness are also planned packages. `scheduler` has only the placeholder so far (FSRS and SM-2 are planned), and `revision` only grade mapping (`recordReview()` is planned).
 
 ## Database workflow
 
