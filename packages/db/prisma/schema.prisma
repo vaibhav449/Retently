@@ -15,7 +15,9 @@ datasource db {
 //   documents.yjs_state, document_access          → Phase 2 (collaboration)
 //   chunks.embedding                              → Phase 2 (embedding model not chosen; its size is baked into the column)
 //   topics, items.topic_id, chunks.topic_id       → Phase 3
-//   card_state                                    → Vaibhav, Phase 1 (his table, his PR)
+//   exams                                         → Phase 3 (exam mode)
+//
+// CHECK constraints that Prisma cannot express live in the migration SQL.
 
 // ─── Auth (Better Auth core schema + our two extra fields) ───────────────────
 
@@ -37,6 +39,11 @@ model User {
   sources   Source[]
   reviews   ReviewLog[]
   llmUsage  LlmUsage[]
+
+  cardStates       CardState[]
+  reviewSessions   ReviewSession[]
+  reviewsPending   ReviewPending[]
+  revisionSettings RevisionSettings?
 
   @@map("users")
 }
@@ -175,19 +182,23 @@ model Item {
   sourceChunkId  String    @map("source_chunk_id") @db.Uuid
   type           ItemType
   prompt         String
-  /// MCQ: the correct option's text (must be one of `options`). Cloze: the hidden text.
-  /// Short answer: a model answer.
+  /// MCQ: the correct option's text. Cloze: the hidden text. Short answer: a model answer.
   answer         String
-  /// MCQ only, already shuffled. Empty for other types.
-  options        String[]
+  /// MCQ only: [{ "id": uuid, "text": string }]. An id is minted once, when the item is created,
+  /// and survives edits to its text. Empty array for other types.
+  options        Json
+  /// MCQ only: the id of the correct option. Answers are graded by option id, never by text.
+  answerOptionId String?   @map("answer_option_id") @db.Uuid
   /// Short answer only.
   rubric         String?
   difficultySeed Float?    @map("difficulty_seed")
   createdAt      DateTime  @default(now()) @map("created_at")
   retiredAt      DateTime? @map("retired_at")
 
-  sourceChunk Chunk       @relation(fields: [sourceChunkId], references: [id], onDelete: Cascade)
-  reviews     ReviewLog[]
+  sourceChunk    Chunk           @relation(fields: [sourceChunkId], references: [id], onDelete: Cascade)
+  reviews        ReviewLog[]
+  cardStates     CardState[]
+  reviewsPending ReviewPending[]
 
   @@index([sourceChunkId])
   @@map("items")
@@ -205,8 +216,11 @@ enum ReviewContext {
 }
 
 /// Append-only. Written only by recordReview() in packages/revision.
+/// The migration adds CHECKs: grade 1–4, latency ≥ 0, and a confidence on every solo answer.
 model ReviewLog {
-  id               String        @id @default(uuid()) @db.Uuid
+  /// No default on purpose: minted when the item is presented (the presentation token's review
+  /// id) or by the duel server, so a retried submit hits the same row. The idempotency key.
+  id               String        @id @db.Uuid
   itemId           String        @map("item_id") @db.Uuid
   userId           String        @map("user_id")
   reviewedAt       DateTime      @default(now()) @map("reviewed_at")
@@ -215,8 +229,9 @@ model ReviewLog {
   /// Null for duel answers (build-plan.md §11.2).
   confidence       Confidence?
   correct          Boolean
-  /// What the user answered, so a misconception can say "you answered X".
-  response         String?
+  /// What the user answered: {"kind":"mcq","option_id":…} or {"kind":"text","text":…}
+  /// (reviewResponseSchema in packages/contracts), so a misconception can say "you answered X".
+  response         Json?
   latencyMs        Int           @map("latency_ms")
   /// Days since this user's previous review of the item. Null on the first review.
   elapsedDays      Float?        @map("elapsed_days")
@@ -229,6 +244,98 @@ model ReviewLog {
   @@index([userId, reviewedAt])
   @@index([itemId, userId])
   @@map("review_log")
+}
+
+// ─── Revision engine (Vaibhav) ───────────────────────────────────────────────
+
+/// One user's memory of one item: a cache of fold(scheduler.next, review_log) that can be rebuilt
+/// at any time. Written only by recordReview() and rebuildCardState() in packages/revision.
+model CardState {
+  userId             String    @map("user_id")
+  itemId             String    @map("item_id") @db.Uuid
+  /// The scheduler that wrote `state`, e.g. "placeholder-v0". Only that scheduler advances it.
+  schedulerVersion   String    @map("scheduler_version")
+  /// The scheduler's CardState (packages/scheduler), discriminated by state.kind.
+  state              Json
+  /// Mirror of state.due_at: the one field the queue filters on.
+  dueAt              DateTime  @map("due_at")
+  /// Set by a confident wrong answer: retest from the start of the next local day.
+  misconceptionUntil DateTime? @map("misconception_until")
+  /// Set from the injected clock, like every time the engine writes.
+  updatedAt          DateTime  @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@id([userId, itemId])
+  @@index([userId, dueAt])
+  @@index([userId, misconceptionUntil])
+  @@map("card_state")
+}
+
+/// A user's persisted plan for one local day, so progress and order stay stable across tabs.
+model ReviewSession {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id")
+  /// The user's local day (revision_settings.timezone) this plan belongs to.
+  localDate     DateTime @map("local_date") @db.Date
+  budgetSec     Int      @map("budget_sec")
+  /// Ordered entries, each with the features that ranked it.
+  plan          Json
+  /// Ranker version, config hash and the numbers the plan was built from.
+  meta          Json
+  extendedCount Int      @default(0) @map("extended_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pending ReviewPending[]
+
+  @@unique([userId, localDate])
+  @@map("review_sessions")
+}
+
+enum ReviewPendingStatus {
+  queued
+  failed
+}
+
+/// A short answer waiting for LLM grading in the worker. Deleted in the transaction that writes its
+/// review_log row; the queue skips items that have one, so they are not served twice.
+model ReviewPending {
+  /// Becomes review_log.id once graded.
+  reviewId    String              @id @map("review_id") @db.Uuid
+  userId      String              @map("user_id")
+  itemId      String              @map("item_id") @db.Uuid
+  sessionId   String?             @map("session_id") @db.Uuid
+  confidence  Confidence
+  /// Same shape as review_log.response.
+  response    Json
+  latencyMs   Int                 @map("latency_ms")
+  submittedAt DateTime            @map("submitted_at")
+  status      ReviewPendingStatus
+  attempts    Int                 @default(0)
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item    Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  session ReviewSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, itemId])
+  @@map("review_pending")
+}
+
+/// Per-user revision settings, kept out of `users` so the auth table stays Better Auth's.
+/// The migration adds a CHECK keeping the budget between 300 and 3600 seconds.
+model RevisionSettings {
+  userId         String   @id @map("user_id")
+  /// Daily review budget in seconds.
+  dailyBudgetSec Int      @default(900) @map("daily_budget_sec")
+  /// IANA time zone that defines "today" and "the next day" for this user.
+  timezone       String   @default("Asia/Kolkata")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("revision_settings")
 }
 
 // ─── LLM cost tracking ───────────────────────────────────────────────────────
