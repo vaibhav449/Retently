@@ -39,6 +39,7 @@ services:
       BETTER_AUTH_URL: ${PUBLIC_URL:?set PUBLIC_URL in .env}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
       REALTIME_TOKEN_SECRET: ${REALTIME_TOKEN_SECRET:?set REALTIME_TOKEN_SECRET in .env}
+      REVIEW_TOKEN_SECRET: ${REVIEW_TOKEN_SECRET:?set REVIEW_TOKEN_SECRET in .env}
     depends_on:
       postgres:
         condition: service_healthy

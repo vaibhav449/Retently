@@ -8,6 +8,8 @@ const serverEnvSchema = z.object({
   BETTER_AUTH_URL: z.url(),
   /** Shared with apps/realtime. Generate with: openssl rand -hex 32 */
   REALTIME_TOKEN_SECRET: z.string().min(32),
+  /** Signs the presentation token of each review question. Web only. Generate with: openssl rand -hex 32 */
+  REVIEW_TOKEN_SECRET: z.string().min(32),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
