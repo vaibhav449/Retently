@@ -1,5 +1,9 @@
 /** Why an answer was not recorded. Nothing is written when one of these is thrown. */
 export type ReviewErrorCode =
+  /** The request body is not a valid answer. */
+  | "invalid_request"
+  /** The presentation token is forged, expired, or was issued to another user. */
+  | "invalid_token"
   /** The item does not exist. */
   | "item_not_found"
   /** The user cannot read the item's source. */
@@ -17,6 +21,8 @@ export type ReviewErrorCode =
 
 /** The HTTP status the answer route returns for each code (05-review-pipeline.md §8.2). */
 export const REVIEW_ERROR_STATUS: Record<ReviewErrorCode, number> = {
+  invalid_request: 400,
+  invalid_token: 400,
   item_not_found: 404,
   forbidden: 403,
   item_retired: 410,
