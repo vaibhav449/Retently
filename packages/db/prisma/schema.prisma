@@ -182,11 +182,13 @@ model Item {
   sourceChunkId  String    @map("source_chunk_id") @db.Uuid
   type           ItemType
   prompt         String
-  /// MCQ: the correct option's text (must be one of `options`). Cloze: the hidden text.
-  /// Short answer: a model answer.
+  /// MCQ: the correct option's text. Cloze: the hidden text. Short answer: a model answer.
   answer         String
-  /// MCQ only, already shuffled. Empty for other types.
-  options        String[]
+  /// MCQ only: [{ "id": uuid, "text": string }]. An id is minted once, when the item is created,
+  /// and survives edits to its text. Empty array for other types.
+  options        Json
+  /// MCQ only: the id of the correct option. Answers are graded by option id, never by text.
+  answerOptionId String?   @map("answer_option_id") @db.Uuid
   /// Short answer only.
   rubric         String?
   difficultySeed Float?    @map("difficulty_seed")
