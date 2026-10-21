@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 # Never run two deploys at once; a newer one waits instead of cancelling a deploy halfway.
@@ -21,6 +21,9 @@ jobs:
   images:
     name: Image (${{ matrix.image }})
     needs: ci
+    # Until the VM is connected (the VM_HOST variable is set), a push runs CI only:
+    # no images are pushed, and `deploy` is skipped because it needs this job.
+    if: vars.VM_HOST != ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

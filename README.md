@@ -71,7 +71,7 @@ The initial SQL uses `CREATE EXTENSION IF NOT EXISTS`, so it can also run agains
 
 ## Deployment
 
-Pull requests run CI (`.github/workflows/ci.yml`). Every push to `main` runs `.github/workflows/deploy.yml`:
+Pull requests run CI (`.github/workflows/ci.yml`). Every push to `master` runs `.github/workflows/deploy.yml`. Until the `VM_HOST` variable is set (one-time setup below), it runs CI only and skips steps 2 and 3:
 
 1. CI again
 2. Build four images (`web`, `realtime`, `worker`, `migrate`) and push them to GitHub Container Registry
