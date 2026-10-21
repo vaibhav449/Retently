@@ -20,7 +20,8 @@
     },
     "test:integration": {
       "dependsOn": ["transit", "generate", "^generate"],
-      "cache": false
+      "cache": false,
+      "passThroughEnv": ["DATABASE_URL"]
     },
     "dev": {
       "cache": false,
