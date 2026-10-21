@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { fsrs6V1 } from "./fsrs";
 import { placeholderV0 } from "./placeholder";
 import type { CardState, Grade } from "./types";
 
@@ -72,6 +73,18 @@ describe("purity", () => {
     const second = withClockAndRandomBomb(replay);
     expect(second).toEqual(first);
     expect(first).toMatchObject({ last_review_at: "2026-10-05T21:00:00.000Z", reps: 4, lapses: 1 });
+  });
+
+  it("FSRS (ts-fsrs inside) replays the same log without the clock or randomness", () => {
+    const fold = () =>
+      LOG.reduce<CardState>(
+        (state, [at, grade]) => fsrs6V1.next(state, grade, new Date(at)),
+        fsrs6V1.initial(),
+      );
+    const first = withClockAndRandomBomb(fold);
+    expect(withClockAndRandomBomb(fold)).toEqual(first);
+    const at = new Date("2026-10-07T09:00:00.000Z");
+    expect(withClockAndRandomBomb(() => fsrs6V1.retrievability(first, at))).toBeGreaterThan(0);
   });
 
   it("reads retrievability and stability without the clock", () => {

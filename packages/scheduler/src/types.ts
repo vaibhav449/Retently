@@ -21,6 +21,16 @@ export interface PlaceholderCardState extends CardState {
   kind: "placeholder";
 }
 
+export interface FsrsCardState extends CardState {
+  kind: "fsrs";
+  /** D, from 1 (easy) to 10 (hard) for this student; 0 until the first review. */
+  difficulty: number;
+  /** S, in days: how long recall takes to fall from 1 to 0.9; 0 until the first review. */
+  stability: number;
+  /** The interval chosen at the last review, in days. */
+  scheduled_days: number;
+}
+
 /**
  * A pure scheduler (04-scheduler.md §2): no clock, no randomness, no I/O. Time always comes in
  * as an argument, so the same inputs give the same output and card_state can be rebuilt by

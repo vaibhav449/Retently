@@ -12,3 +12,11 @@ export const cardStateSchema = z.looseObject({
   reps: z.number().int().nonnegative(),
   lapses: z.number().int().nonnegative(),
 });
+
+/** An FSRS state: zeros until the first review, then D in [1, 10] and S > 0. */
+export const fsrsCardStateSchema = cardStateSchema.extend({
+  kind: z.literal("fsrs"),
+  difficulty: z.number().min(0).max(10),
+  stability: z.number().nonnegative(),
+  scheduled_days: z.number().int().nonnegative(),
+});
