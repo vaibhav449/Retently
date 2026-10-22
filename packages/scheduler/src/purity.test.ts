@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fsrs6V1 } from "./fsrs";
 import { placeholderV0 } from "./placeholder";
+import { sm2V1 } from "./sm2";
 import type { CardState, Grade } from "./types";
 
 /**
@@ -85,6 +86,16 @@ describe("purity", () => {
     expect(withClockAndRandomBomb(fold)).toEqual(first);
     const at = new Date("2026-10-07T09:00:00.000Z");
     expect(withClockAndRandomBomb(() => fsrs6V1.retrievability(first, at))).toBeGreaterThan(0);
+  });
+
+  it("SM-2 replays the same log without the clock or randomness", () => {
+    const fold = () =>
+      LOG.reduce<CardState>(
+        (state, [at, grade]) => sm2V1.next(state, grade, new Date(at)),
+        sm2V1.initial(),
+      );
+    const first = withClockAndRandomBomb(fold);
+    expect(withClockAndRandomBomb(fold)).toEqual(first);
   });
 
   it("reads retrievability and stability without the clock", () => {
