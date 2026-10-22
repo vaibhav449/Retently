@@ -13,6 +13,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:integration": "turbo run test:integration",
+    "test:e2e": "npm run test:e2e --workspace @repo/web",
     "check": "turbo run lint typecheck test && prettier --check .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
