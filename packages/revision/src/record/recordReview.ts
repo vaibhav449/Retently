@@ -1,5 +1,5 @@
 import type { Confidence, ReviewContext, ReviewResponse } from "@repo/contracts";
-import type { Database } from "@repo/db";
+import { canAccessSource, type Database } from "@repo/db";
 import {
   type CardState,
   cardStateSchema,
@@ -174,7 +174,6 @@ export async function recordReview(
   });
 }
 
-/** Owner-only until sharing arrives in Phase 2, with canAccessSource() in packages/db. */
 async function loadReviewableItem(db: Database, userId: string, itemId: string) {
   const item = await db.item.findUnique({
     where: { id: itemId },
@@ -183,11 +182,11 @@ async function loadReviewableItem(db: Database, userId: string, itemId: string) 
       options: true,
       answerOptionId: true,
       retiredAt: true,
-      sourceChunk: { select: { source: { select: { ownerId: true } } } },
+      sourceChunk: { select: { sourceId: true } },
     },
   });
   if (!item) throw new ReviewError("item_not_found", `item ${itemId} does not exist`);
-  if (item.sourceChunk.source.ownerId !== userId) {
+  if (!(await canAccessSource(db, userId, item.sourceChunk.sourceId))) {
     throw new ReviewError("forbidden", `user ${userId} cannot read item ${itemId}`);
   }
   if (item.retiredAt) throw new ReviewError("item_retired", `item ${itemId} was retired`);
