@@ -4,7 +4,7 @@ import {
   reviewNextResponseSchema,
   type SessionProgress,
 } from "@repo/contracts";
-import type { Database } from "@repo/db";
+import { type Database, itemsReadableBy } from "@repo/db";
 import type { Clock } from "../record/recordReview";
 import { signPresentationToken } from "../record/token";
 import { uuidv7 } from "../record/uuidv7";
@@ -19,12 +19,12 @@ export interface PresentDeps {
 
 const mcqOptionsSchema = mcqOptionSchema.array();
 
-/** Items this user may be asked now: their own, live, and gradable (MCQ only in Phase 1). */
+/** Items this user may be asked now: readable by them, live, and gradable (MCQ only in Phase 1). */
 function reviewableBy(userId: string) {
   return {
+    ...itemsReadableBy(userId),
     retiredAt: null,
     type: "mcq" as const,
-    sourceChunk: { source: { ownerId: userId } },
   };
 }
 

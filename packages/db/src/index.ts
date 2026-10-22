@@ -10,3 +10,5 @@ export function createDb(url: string) {
 }
 
 export type Database = ReturnType<typeof createDb>["db"];
+
+export { canAccessSource, itemsReadableBy } from "./access";
