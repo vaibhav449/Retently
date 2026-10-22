@@ -114,3 +114,49 @@ jobs:
       - run: npm ci
 
       - run: npm run test:integration
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d app"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Read by both the dev server that Playwright starts and the tests. The secrets are
+      # throwaway values for this job's own database.
+      DATABASE_URL: postgres://app:app@localhost:5432/app
+      BETTER_AUTH_URL: http://localhost:3000
+      BETTER_AUTH_SECRET: ci-only-better-auth-secret-0123456789
+      REALTIME_TOKEN_SECRET: ci-only-realtime-token-secret-0123456789
+      REVIEW_TOKEN_SECRET: ci-only-review-token-secret-0123456789
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm install --global npm@11.17.0
+
+      - run: npm ci
+
+      - run: npm run db:migrate
+
+      - name: Install Chromium for Playwright
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - run: npm run test:e2e

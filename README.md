@@ -21,12 +21,13 @@ npm run dev           # web on :3000, realtime on :4000, worker
 - RabbitMQ dashboard: http://localhost:15672 (user `app`, password `app`)
 - If port 4000 is taken on your machine, add `PORT=4100` (or any free port) to `.env`.
 - `npm run check` needs no database. `npm run test:integration` runs the tests that need Postgres (after `npm run infra:up`); each run creates and drops its own database.
+- `npm run test:e2e` runs the Playwright tests in `apps/web/e2e`, starting the web dev server if one is not running. Like the dev server, the tests read `apps/web/.env.local`. Install the browser once with `npx playwright install chromium` in `apps/web`.
 
 ## Workspace structure
 
 The root `package.json` declares npm workspaces for `apps/*` and `packages/*`. Run installs from the repository root: npm installs dependencies and links local packages such as `@repo/contracts`. Each workspace has its own `package.json`; the root `package-lock.json` records resolved dependencies for the whole repo. Use `npm ci` for a clean install from that lockfile.
 
-Turborepo coordinates the workspace scripts and caches eligible results. The applications are currently skeletons: the web app has a placeholder page, realtime echoes validated messages on sockets opened with a valid realtime token, and the worker connects to RabbitMQ without consuming jobs. Authentication, application tables, AI processing, collaboration, and study features are planned.
+Turborepo coordinates the workspace scripts and caches eligible results. The web app has accounts and a first review loop (a signed-in student answers their questions at `/review`); realtime echoes validated messages on sockets opened with a valid realtime token; and the worker connects to RabbitMQ without consuming jobs. Notes, question generation, collaboration, and the rest of the study features are planned.
 
 The [project documentation index](packages/docs/README.md) describes the current implementation and links to the build plan, task distribution, and product specifications.
 
@@ -40,6 +41,9 @@ The [project documentation index](packages/docs/README.md) describes the current
 | `packages/contracts`         | Zod schemas shared by every app                                 |
 | `packages/db`                | Prisma client, schema, and SQL migrations                       |
 | `packages/eslint-config`     | Shared ESLint rules                                             |
+| `packages/realtime-token`    | Signs and verifies the token that opens `/events`               |
+| `packages/revision`          | Review pipeline: grading and `recordReview()`                   |
+| `packages/scheduler`         | Pure schedulers: placeholder, FSRS-6, SM-2                      |
 | `packages/typescript-config` | Shared `tsconfig` presets                                       |
 | `deploy/`                    | Production Compose stack, Caddyfile, VM scripts                 |
 | `docker-compose.yml`         | Local Postgres and RabbitMQ for development                     |
