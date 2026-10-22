@@ -20,3 +20,11 @@ export const fsrsCardStateSchema = cardStateSchema.extend({
   stability: z.number().nonnegative(),
   scheduled_days: z.number().int().nonnegative(),
 });
+
+/** An SM-2 state: interval in whole days, ease never below 1.3. */
+export const sm2CardStateSchema = cardStateSchema.extend({
+  kind: z.literal("sm2"),
+  repetition: z.number().int().nonnegative(),
+  interval: z.number().int().nonnegative(),
+  ease: z.number().min(1.3),
+});

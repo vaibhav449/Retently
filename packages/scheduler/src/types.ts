@@ -31,6 +31,16 @@ export interface FsrsCardState extends CardState {
   scheduled_days: number;
 }
 
+export interface Sm2CardState extends CardState {
+  kind: "sm2";
+  /** SM-2's n: successful reviews in a row, back to 0 after a miss. `reps` counts all reviews. */
+  repetition: number;
+  /** Days until the next review; 0 until the first review. */
+  interval: number;
+  /** The easiness factor, from 2.5, never below 1.3. */
+  ease: number;
+}
+
 /**
  * A pure scheduler (04-scheduler.md §2): no clock, no randomness, no I/O. Time always comes in
  * as an argument, so the same inputs give the same output and card_state can be rebuilt by
