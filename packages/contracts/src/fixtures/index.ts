@@ -5,6 +5,7 @@
  */
 import type { Citation } from "../citation";
 import type { ClozeItem, McqItem, ShortAnswerItem } from "../item";
+import type { IngestCompletedEvent, IngestFailedEvent, IngestRequestedJob } from "../jobs";
 import type { RealtimeTokenResponse } from "../realtime";
 import type {
   ReviewAnswerRequest,
@@ -209,6 +210,26 @@ export const wsEnvelopeFixture: WsEnvelope = {
   type: "ingest.completed",
   payload: { source_id: PDF_SOURCE_ID, items_created: 42 },
   request_id: "req_01",
+};
+
+export const ingestRequestedJobFixture: IngestRequestedJob = {
+  type: "ingest.requested",
+  v: 1,
+  source_id: NOTE_SOURCE_ID,
+  version: 7,
+};
+
+export const ingestCompletedEventFixture: IngestCompletedEvent = {
+  type: "ingest.completed",
+  payload: { source_id: NOTE_SOURCE_ID, items_created: 12 },
+};
+
+export const ingestFailedEventFixture: IngestFailedEvent = {
+  type: "ingest.failed",
+  payload: {
+    source_id: NOTE_SOURCE_ID,
+    error: "Questions could not be generated. Try again later.",
+  },
 };
 
 export const realtimeTokenResponseFixture: RealtimeTokenResponse = {
