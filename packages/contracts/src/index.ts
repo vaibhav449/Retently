@@ -1,4 +1,5 @@
 export * from "./citation";
+export * from "./document";
 export * from "./health";
 export * from "./item";
 export * from "./jobs";

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { requireUser } from "@/lib/session";
 import { SignOutButton } from "./sign-out-button";
@@ -9,6 +10,14 @@ export default function Home() {
       <p className="text-foreground/70">
         Notes and PDFs that turn into a personalised revision schedule.
       </p>
+      <nav className="flex gap-4 text-sm">
+        <Link href="/notes" className="underline underline-offset-4">
+          Notes
+        </Link>
+        <Link href="/review" className="underline underline-offset-4">
+          Review
+        </Link>
+      </nav>
       <Suspense fallback={<p className="text-muted-foreground text-sm">Loading your account…</p>}>
         <Account />
       </Suspense>
