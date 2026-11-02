@@ -1,12 +1,22 @@
 import { createServer } from "node:http";
-import type { HealthResponse } from "@repo/contracts";
+import { type HealthResponse, ingestRequestedJobSchema } from "@repo/contracts";
+import { createDb } from "@repo/db";
+import {
+  assertTopology,
+  connectWithRetry,
+  publishEvent,
+  QUEUES,
+  startConsumer,
+} from "@repo/messaging";
+import { ingestHandlers } from "./consumers/ingest";
 import { loadEnv } from "./env";
-import { connectWithRetry } from "./rabbitmq";
+import { ingestSourceStub } from "./ingest-stub";
 
 const env = loadEnv();
 const startedAt = Date.now();
 let shuttingDown = false;
 
+const { db, close: closeDb } = createDb(env.DATABASE_URL);
 const connection = await connectWithRetry(env.RABBITMQ_URL);
 console.log("worker connected to RabbitMQ");
 
@@ -17,6 +27,37 @@ connection.on("close", () => {
   console.error("RabbitMQ connection closed unexpectedly, exiting");
   process.exit(1);
 });
+
+// A confirm channel, so a retry copy or a parked job counts as sent only once RabbitMQ has it.
+const channel = await connection.createConfirmChannel();
+channel.on("close", () => {
+  if (shuttingDown) return;
+  console.error("RabbitMQ channel closed unexpectedly, exiting");
+  process.exit(1);
+});
+await assertTopology(channel);
+
+const ingest = ingestHandlers({
+  ownerOf: async (sourceId) => {
+    const source = await db.source.findUnique({
+      where: { id: sourceId },
+      select: { ownerId: true },
+    });
+    return source?.ownerId ?? null;
+  },
+  ingestSource: ingestSourceStub,
+  publishEvent: (userId, event) => publishEvent(channel, userId, event),
+});
+const consumer = await startConsumer(channel, {
+  queue: QUEUES.ingest,
+  schema: ingestRequestedJobSchema,
+  // An ingest job is mostly LLM calls: a few at a time is plenty, and fair across workers.
+  prefetch: 4,
+  maxAttempts: 3,
+  handle: ingest.handle,
+  onGaveUp: ingest.onGaveUp,
+});
+console.log(`worker consuming ${QUEUES.ingest}`);
 
 const health = createServer((req, res) => {
   if (req.method === "GET" && req.url === "/health") {
@@ -44,12 +85,16 @@ health.listen(env.HEALTH_PORT, () => {
   console.log(`worker health check on port ${env.HEALTH_PORT}`);
 });
 
+/** Stop taking jobs, finish the ones in hand, then close (docs/rabbitmq/09 §4). */
 async function shutdown(signal: NodeJS.Signals) {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log(`${signal} received, closing RabbitMQ connection`);
+  console.log(`${signal} received: no new jobs, finishing the ones in hand`);
   health.close();
+  await consumer.stop();
+  await channel.close();
   await connection.close();
+  await closeDb();
   process.exit(0);
 }
 

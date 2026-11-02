@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { backoffDelay } from "./rabbitmq";
+import { backoffDelay } from "./connect";
 
 describe("backoffDelay", () => {
   it("doubles the delay on every attempt", () => {

@@ -38,10 +38,11 @@ The [project documentation index](packages/docs/README.md) describes the current
 | ---------------------------- | --------------------------------------------------------------- |
 | `apps/web`                   | Next.js 16 app (App Router, Tailwind 4)                         |
 | `apps/realtime`              | HTTP + WebSocket server: `/health`, and token-checked `/events` |
-| `apps/worker`                | Background worker connected to RabbitMQ                         |
+| `apps/worker`                | Background worker: RabbitMQ jobs, retries and a parking lot     |
 | `packages/contracts`         | Zod schemas shared by every app                                 |
 | `packages/db`                | Prisma client, schema, and SQL migrations                       |
 | `packages/eslint-config`     | Shared ESLint rules                                             |
+| `packages/messaging`         | RabbitMQ topology, publishing, retries and the consumer loop    |
 | `packages/realtime-token`    | Signs and verifies the token that opens `/events`               |
 | `packages/revision`          | Review pipeline: grading and `recordReview()`                   |
 | `packages/scheduler`         | Pure schedulers: placeholder, FSRS-6, SM-2                      |

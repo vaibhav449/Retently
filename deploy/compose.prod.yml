@@ -55,8 +55,11 @@ services:
     image: ${IMAGE_PREFIX:?set IMAGE_PREFIX in .env}-worker:${IMAGE_TAG:-latest}
     environment:
       RABBITMQ_URL: amqp://${RABBITMQ_USER:?}:${RABBITMQ_PASSWORD:?}@rabbitmq:5672
+      DATABASE_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
     depends_on:
       rabbitmq:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
 
   # One-off job, not a long-running service. deploy.sh runs it before starting the apps.

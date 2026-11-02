@@ -81,7 +81,7 @@ jobs:
         run: npm run db:migrate
 
   integration:
-    name: Integration tests (Postgres)
+    name: Integration tests (Postgres, RabbitMQ)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -98,9 +98,24 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      rabbitmq:
+        image: rabbitmq:4-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: app
+          RABBITMQ_DEFAULT_PASS: app
+        ports:
+          - 5672:5672
+          # The management API, which the worker tests use to create a throwaway vhost.
+          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
     env:
-      # Each test run creates and drops its own database on this server.
+      # Each test run creates and drops its own database, and its own RabbitMQ vhost.
       DATABASE_URL: postgres://app:app@localhost:5432/app
+      RABBITMQ_URL: amqp://app:app@localhost:5672
     steps:
       - uses: actions/checkout@v7
 
