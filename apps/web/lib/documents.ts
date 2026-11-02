@@ -1,3 +1,4 @@
+import type { SaveDocumentContentRequest } from "@repo/contracts";
 import type { Database } from "@repo/db";
 import { z } from "zod";
 
@@ -64,6 +65,42 @@ export async function renameDocument(
     await tx.source.updateMany({ where: { documentId }, data: { title } });
     return true;
   });
+}
+
+export type SaveContentResult =
+  | { status: "saved"; version: number }
+  | { status: "conflict"; version: number }
+  | { status: "not_found" };
+
+/**
+ * One autosave: writes both forms of the content and bumps `version`, but only if the note is
+ * still at `baseVersion`. Otherwise another tab saved first and this save would overwrite it.
+ */
+export async function saveDocumentContent(
+  db: Database,
+  userId: string,
+  documentId: string,
+  content: {
+    json: SaveDocumentContentRequest["content_json"];
+    markdown: string;
+    baseVersion: number;
+  },
+): Promise<SaveContentResult> {
+  const where = ownedBy(userId, documentId);
+  if (!where) return { status: "not_found" };
+
+  const { count } = await db.document.updateMany({
+    where: { ...where, version: content.baseVersion },
+    data: {
+      contentJson: content.json,
+      contentMd: content.markdown,
+      version: { increment: 1 },
+    },
+  });
+  if (count === 1) return { status: "saved", version: content.baseVersion + 1 };
+
+  const current = await db.document.findFirst({ where, select: { version: true } });
+  return current ? { status: "conflict", version: current.version } : { status: "not_found" };
 }
 
 /**

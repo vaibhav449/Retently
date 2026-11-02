@@ -65,6 +65,67 @@ test("a student creates, renames and deletes a note", async ({ page, studentId }
   expect(await db.source.count({ where: { id: source.id } })).toBe(0);
 });
 
+test("a note's text is autosaved and survives a reload", async ({ page }) => {
+  await page.goto("/notes");
+  await page.getByRole("button", { name: "New note" }).click();
+  await expect(page).toHaveURL(/\/notes\/[0-9a-f-]{36}$/);
+  const id = page.url().split("/").pop();
+
+  const editor = page.getByRole("textbox", { name: "Note" });
+  await editor.click();
+  // "## " is TipTap's Markdown shortcut for a heading.
+  await editor.pressSequentially("## Cells");
+  await editor.press("Enter");
+  await editor.pressSequentially("Mitochondria make most of the cell's ATP.");
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+
+  const saved = await db.document.findUniqueOrThrow({ where: { id } });
+  expect(saved.contentMd).toBe("## Cells\n\nMitochondria make most of the cell's ATP.");
+  expect(saved.version).toBeGreaterThan(0);
+  const blocks = (saved.contentJson as { content: { type: string; attrs: { id: string } }[] })
+    .content;
+  expect(blocks.map((block) => block.type)).toEqual(["heading", "paragraph"]);
+  for (const block of blocks) expect(block.attrs.id).toEqual(expect.any(String));
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Cells" })).toBeVisible();
+  await expect(editor).toContainText("Mitochondria make most of the cell's ATP.");
+
+  // Editing again keeps the block ids that chunks will point at.
+  await editor.click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.type(" It has two membranes.");
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect
+    .poll(async () => (await db.document.findUniqueOrThrow({ where: { id } })).contentMd)
+    .toBe("## Cells\n\nMitochondria make most of the cell's ATP. It has two membranes.");
+  const edited = await db.document.findUniqueOrThrow({ where: { id } });
+  const editedBlocks = (edited.contentJson as { content: { attrs: { id: string } }[] }).content;
+  expect(editedBlocks.map((block) => block.attrs.id)).toEqual(
+    blocks.map((block) => block.attrs.id),
+  );
+});
+
+test("a save from a stale version is refused", async ({ page, studentId }) => {
+  const note = await db.document.create({
+    data: {
+      ownerId: studentId,
+      contentMd: "Newer text from another tab",
+      version: 3,
+      source: { create: { ownerId: studentId, kind: "note", title: "Untitled" } },
+    },
+  });
+
+  const response = await page.request.patch(`/api/documents/${note.id}`, {
+    data: { content_json: { type: "doc", content: [] }, content_md: "Older text", base_version: 2 },
+  });
+  expect(response.status()).toBe(409);
+  expect(await response.json()).toEqual({ error: "version_conflict", version: 3 });
+
+  const after = await db.document.findUniqueOrThrow({ where: { id: note.id } });
+  expect(after).toMatchObject({ contentMd: "Newer text from another tab", version: 3 });
+});
+
 test("another student's note is not found", async ({ page, browser, baseURL, studentId }) => {
   const note = await db.document.create({
     data: {
@@ -86,6 +147,10 @@ test("another student's note is not found", async ({ page, browser, baseURL, stu
       data: { title: "Taken" },
     });
     expect(rename.status()).toBe(404);
+    const save = await other.request.patch(`/api/documents/${note.id}`, {
+      data: { content_json: { type: "doc", content: [] }, content_md: "Taken", base_version: 0 },
+    });
+    expect(save.status()).toBe(404);
     const remove = await other.request.delete(`/api/documents/${note.id}`);
     expect(remove.status()).toBe(404);
 

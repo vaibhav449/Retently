@@ -1,3 +1,4 @@
+import type { JSONContent } from "@tiptap/react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -5,6 +6,7 @@ import { Suspense } from "react";
 import { getDb } from "@/lib/db";
 import { getDocument } from "@/lib/documents";
 import { requireUser } from "@/lib/session";
+import { NoteEditor } from "./note-editor";
 import { NoteHeader } from "./note-header";
 
 export const metadata: Metadata = { title: "Note · Retently" };
@@ -35,10 +37,12 @@ async function Note({ params }: Pick<PageProps<"/notes/[id]">, "params">) {
   return (
     <div className="flex flex-col gap-6">
       <NoteHeader id={note.id} title={note.title} />
-      {/* The TipTap editor (A2) goes here. */}
-      <p className="text-muted-foreground rounded-lg border border-dashed p-6 text-sm">
-        The editor is coming next.
-      </p>
+      <NoteEditor
+        documentId={note.id}
+        // Written only by this editor, so it is TipTap JSON (or null before the first save).
+        initialContent={note.contentJson as JSONContent | null}
+        initialVersion={note.version}
+      />
     </div>
   );
 }
