@@ -103,9 +103,10 @@ describe("GET /api/review/next (presentNext)", () => {
       at(5 * SECOND),
     );
 
-    expect(await present(seeded.userId, at(DAY / 2))).toEqual({ state: "nothing_due" });
-    const tomorrow = await presentOk(seeded.userId, at(DAY + 5 * SECOND));
-    expect(tomorrow.item).toMatchObject({ category: "review", item: { id: seeded.itemId } });
+    // fsrs6-v1 gives a new card answered Good 3 days (04-scheduler.md §4.2).
+    expect(await present(seeded.userId, at(2 * DAY))).toEqual({ state: "nothing_due" });
+    const due = await presentOk(seeded.userId, at(3 * DAY + 5 * SECOND));
+    expect(due.item).toMatchObject({ category: "review", item: { id: seeded.itemId } });
   });
 });
 
@@ -132,8 +133,8 @@ describe("POST /api/review/answer (answerReview)", () => {
         correct_answer: "Mitochondrion",
         grade: 3,
         retrievability_before: null,
-        next_due_at: at(DAY + 5 * SECOND).toISOString(),
-        scheduled_days: 1,
+        next_due_at: at(3 * DAY + 5 * SECOND).toISOString(),
+        scheduled_days: 3,
         idempotent_replay: false,
         citation: {
           chunk_id: seeded.chunkId,
