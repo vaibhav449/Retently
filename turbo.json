@@ -10,7 +10,7 @@
       "dependsOn": ["^transit"]
     },
     "lint": {
-      "dependsOn": ["transit"]
+      "dependsOn": ["transit", "generate", "^generate"]
     },
     "typecheck": {
       "dependsOn": ["transit", "generate", "^generate"]
