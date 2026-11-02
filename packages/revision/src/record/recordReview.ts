@@ -10,6 +10,7 @@ import {
 import { ReviewError } from "../errors";
 import { gradeLocally } from "../grading/gradeResponse";
 import { type GradingConfig, mapGrade } from "../grading/mapping";
+import { lockCard } from "./lock";
 
 /** A second solo answer to the same item within this window is a duplicate (two tabs). */
 const DUPLICATE_WINDOW_MS = 30_000;
@@ -67,9 +68,7 @@ export async function recordReview(
   const card = { userId: input.userId, itemId: input.itemId };
 
   return deps.db.$transaction(async (tx) => {
-    // One answer at a time per (user, item). A row lock can't do this: before the first review
-    // there is no card_state row to lock. Released when the transaction ends.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${input.userId}:${input.itemId}`}))`;
+    await lockCard(tx, input.userId, input.itemId);
 
     const prior = await tx.reviewLog.findUnique({ where: { id: input.reviewId } });
     if (prior) {
@@ -193,12 +192,14 @@ async function loadReviewableItem(db: Database, userId: string, itemId: string) 
   return item;
 }
 
-function dueDateOf(state: CardState, version: string): Date {
+/** card_state.due_at for a state the scheduler just produced; it always has a due date. */
+export function dueDateOf(state: CardState, version: string): Date {
   if (state.due_at === null) throw new Error(`${version} returned a state without due_at`);
   return new Date(state.due_at);
 }
 
-function asGrade(value: number): Grade {
+/** review_log.grade as the scheduler's Grade; the column's CHECK keeps it within 1-4. */
+export function asGrade(value: number): Grade {
   if (value === 1 || value === 2 || value === 3 || value === 4) return value;
   throw new Error(`review_log.grade ${value} is outside 1-4`);
 }

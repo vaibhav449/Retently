@@ -22,6 +22,7 @@ npm run dev           # web on :3000, realtime on :4000, worker
 - If port 4000 is taken on your machine, add `PORT=4100` (or any free port) to `.env`.
 - `npm run check` needs no database. `npm run test:integration` runs the tests that need Postgres (after `npm run infra:up`); each run creates and drops its own database.
 - `npm run test:e2e` runs the Playwright tests in `apps/web/e2e`, starting the web dev server if one is not running. Like the dev server, the tests read `apps/web/.env.local`. Install the browser once with `npx playwright install chromium` in `apps/web`.
+- `card_state` is a cache of the answers in `review_log`. `npm run engine:check` verifies it; `npm run engine:rebuild` rewrites it with the active scheduler, which is how a scheduler change (such as placeholder → FSRS) reaches existing cards.
 
 ## Workspace structure
 

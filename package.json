@@ -23,7 +23,9 @@
     "postinstall": "npm run generate --workspaces --if-present",
     "db:generate": "npm run generate --workspace @repo/db",
     "db:migrate:dev": "npm run migrate:dev --workspace @repo/db --",
-    "db:studio": "npm run studio --workspace @repo/db"
+    "db:studio": "npm run studio --workspace @repo/db",
+    "engine:rebuild": "npm run engine:rebuild --workspace @repo/revision",
+    "engine:check": "npm run engine:check --workspace @repo/revision"
   },
   "devDependencies": {
     "prettier": "3.9.10",

@@ -17,6 +17,14 @@ export {
   verifyPresentationToken,
 } from "./record/token";
 export { uuidv7 } from "./record/uuidv7";
+export {
+  type CardMismatch,
+  checkCardState,
+  type RebuildDeps,
+  type RebuildSummary,
+  rebuildAll,
+  rebuildCardState,
+} from "./rebuild/replay";
 export { type AnswerDeps, answerReview } from "./review/answer";
 export { type PresentDeps, presentNext } from "./review/present";
 export { shuffleBySeed } from "./review/shuffle";

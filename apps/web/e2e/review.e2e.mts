@@ -54,7 +54,8 @@ test("a confident correct answer is recorded with its confidence and latency", a
 
   await expect(page.getByText("Correct", { exact: true })).toBeVisible();
   await expect(page.getByText(NOTE_TEXT)).toBeVisible();
-  await expect(page.getByText(/^Next review tomorrow/)).toBeVisible();
+  // fsrs6-v1: a new card answered Good comes back in 3 days.
+  await expect(page.getByText(/^Next review in 3 days/)).toBeVisible();
 
   const log = await db.reviewLog.findFirstOrThrow({ where: { userId: studentId } });
   expect(log).toMatchObject({

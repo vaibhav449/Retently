@@ -1,4 +1,4 @@
-import { createRegistry, placeholderV0, type SchedulerRegistry } from "@repo/scheduler";
+import { createRegistry, fsrs6V1, placeholderV0, type SchedulerRegistry } from "@repo/scheduler";
 import type { GradingConfig } from "./grading/mapping";
 import type { Clock } from "./record/recordReview";
 
@@ -9,9 +9,10 @@ export const systemClock: Clock = { now: () => new Date() };
 export const DEFAULT_GRADING: GradingConfig = { fastRatio: 1 };
 
 /**
- * Phase 1 schedules new cards with placeholder-v0. FSRS becomes the active scheduler in Phase 2,
- * after card_state is rebuilt from review_log (04-scheduler.md §8).
+ * New cards are scheduled with fsrs6-v1. placeholder-v0 stays registered because a stored state is
+ * only ever advanced by the scheduler that wrote it: cards from Phase 1 keep their placeholder state
+ * until `npm run engine:rebuild` replays their log through FSRS (04-scheduler.md §8).
  */
 export function createDefaultRegistry(): SchedulerRegistry {
-  return createRegistry([placeholderV0], "placeholder-v0");
+  return createRegistry([placeholderV0, fsrs6V1], "fsrs6-v1");
 }

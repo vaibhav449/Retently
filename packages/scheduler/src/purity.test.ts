@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fsrs6V1 } from "./fsrs";
 import { placeholderV0 } from "./placeholder";
+import { replay as replayLog } from "./replay";
 import { sm2V1 } from "./sm2";
 import type { CardState, Grade } from "./types";
 
@@ -96,6 +97,13 @@ describe("purity", () => {
       );
     const first = withClockAndRandomBomb(fold);
     expect(withClockAndRandomBomb(fold)).toEqual(first);
+  });
+
+  it("replay() folds the log without the clock or randomness", () => {
+    const reviews = LOG.map(([at, grade]) => ({ grade, reviewedAt: new Date(at) }));
+    const first = withClockAndRandomBomb(() => replayLog(fsrs6V1, reviews));
+    expect(withClockAndRandomBomb(() => replayLog(fsrs6V1, reviews))).toEqual(first);
+    expect(first).toMatchObject({ kind: "fsrs", reps: 4, lapses: 1 });
   });
 
   it("reads retrievability and stability without the clock", () => {
