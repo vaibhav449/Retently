@@ -3,6 +3,11 @@ import type { z } from "zod";
 import { citationSchema } from "./citation";
 import * as fixtures from "./fixtures";
 import { itemSchema, mcqItemSchema } from "./item";
+import {
+  ingestCompletedEventSchema,
+  ingestFailedEventSchema,
+  ingestRequestedJobSchema,
+} from "./jobs";
 import { realtimeTokenResponseSchema } from "./realtime";
 import {
   gradeSchema,
@@ -40,6 +45,9 @@ const cases: [string, z.ZodType, unknown][] = [
   ["reviewAnswerGradingFixture", reviewAnswerResponseSchema, fixtures.reviewAnswerGradingFixture],
   ["reviewSessionViewFixture", reviewSessionViewSchema, fixtures.reviewSessionViewFixture],
   ["wsEnvelopeFixture", wsEnvelopeSchema, fixtures.wsEnvelopeFixture],
+  ["ingestRequestedJobFixture", ingestRequestedJobSchema, fixtures.ingestRequestedJobFixture],
+  ["ingestCompletedEventFixture", ingestCompletedEventSchema, fixtures.ingestCompletedEventFixture],
+  ["ingestFailedEventFixture", ingestFailedEventSchema, fixtures.ingestFailedEventFixture],
   [
     "realtimeTokenResponseFixture",
     realtimeTokenResponseSchema,
