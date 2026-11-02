@@ -21,7 +21,7 @@
     "test:integration": {
       "dependsOn": ["transit", "generate", "^generate"],
       "cache": false,
-      "passThroughEnv": ["DATABASE_URL"]
+      "passThroughEnv": ["DATABASE_URL", "RABBITMQ_URL"]
     },
     "dev": {
       "cache": false,
