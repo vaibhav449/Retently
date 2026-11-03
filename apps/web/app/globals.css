@@ -131,3 +131,43 @@ body {
     @apply font-sans;
   }
 }
+
+/* The note editor's content. Tailwind's preflight strips heading and list styles. */
+@layer components {
+  .tiptap > * + * {
+    @apply mt-3;
+  }
+  .tiptap h1 {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+  .tiptap h2 {
+    @apply mt-6 text-xl font-semibold tracking-tight;
+  }
+  .tiptap h3 {
+    @apply mt-5 text-lg font-semibold;
+  }
+  .tiptap ul {
+    @apply list-disc pl-6;
+  }
+  .tiptap ol {
+    @apply list-decimal pl-6;
+  }
+  .tiptap li > * + * {
+    @apply mt-1;
+  }
+  .tiptap blockquote {
+    @apply text-muted-foreground border-l-2 pl-4;
+  }
+  .tiptap code {
+    @apply bg-muted rounded px-1 py-0.5 font-mono text-sm;
+  }
+  .tiptap pre {
+    @apply bg-muted overflow-x-auto rounded-lg p-3 font-mono text-sm;
+  }
+  .tiptap pre code {
+    @apply bg-transparent p-0;
+  }
+  .tiptap hr {
+    @apply my-6;
+  }
+}
