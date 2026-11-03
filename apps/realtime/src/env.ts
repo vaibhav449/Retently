@@ -5,6 +5,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   /** Shared with apps/web, which signs the tokens this server verifies. */
   REALTIME_TOKEN_SECRET: z.string().min(32),
+  /** Where the worker's events come from; they are forwarded to each user's sockets. */
+  RABBITMQ_URL: z.url({ protocol: /^amqps?$/ }),
 });
 
 export type Env = z.infer<typeof envSchema>;

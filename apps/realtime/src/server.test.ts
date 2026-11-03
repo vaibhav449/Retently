@@ -4,6 +4,7 @@ import { REALTIME_TOKEN_TTL_SECONDS, signRealtimeToken } from "@repo/realtime-to
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import { createRealtimeServer, type RealtimeServer } from "./server";
+import { openGreeted } from "./test/sockets";
 
 const SECRET = "test-secret-that-is-at-least-32-characters-long";
 const OTHER_SECRET = "another-secret-that-is-at-least-32-characters";
@@ -123,3 +124,38 @@ function refusedStatus(url: string): Promise<number> {
     ws.on("error", reject);
   });
 }
+
+describe("sendToUser", () => {
+  const event = {
+    type: "ingest.completed",
+    payload: { source_id: "6b1f0c2e-4d3a-4f8e-9a1b-2c3d4e5f6a7b", items_created: 4 },
+  };
+
+  it("reaches every open socket of that user and nobody else", async () => {
+    const otherToken = await signRealtimeToken({ userId: "user_2" }, SECRET);
+    const [tab1, tab2, stranger] = await Promise.all([
+      openGreeted(eventsUrl(validToken)),
+      openGreeted(eventsUrl(validToken)),
+      openGreeted(eventsUrl(otherToken)),
+    ]);
+
+    expect(realtime.sendToUser("user_1", event)).toBe(2);
+    expect(await Promise.all([tab1.next(), tab2.next()])).toEqual([event, event]);
+    expect(await stranger.next(200)).toBeUndefined();
+
+    for (const socket of [tab1, tab2, stranger]) socket.ws.close();
+  });
+
+  it("forgets a socket once it closes", async () => {
+    const tab = await openGreeted(eventsUrl(validToken));
+    expect(realtime.sendToUser("user_1", event)).toBe(1);
+    await tab.next();
+
+    await new Promise<void>((resolve) => {
+      tab.ws.once("close", () => resolve());
+      tab.ws.close();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(realtime.sendToUser("user_1", event)).toBe(0);
+  });
+});
