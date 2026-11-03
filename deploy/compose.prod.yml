@@ -49,6 +49,10 @@ services:
     image: ${IMAGE_PREFIX:?set IMAGE_PREFIX in .env}-realtime:${IMAGE_TAG:-latest}
     environment:
       REALTIME_TOKEN_SECRET: ${REALTIME_TOKEN_SECRET:?set REALTIME_TOKEN_SECRET in .env}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:?}:${RABBITMQ_PASSWORD:?}@rabbitmq:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 
   worker:
     <<: *app

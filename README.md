@@ -20,6 +20,7 @@ npm run dev           # web on :3000, realtime on :4000, worker
 
 - RabbitMQ dashboard: http://localhost:15672 (user `app`, password `app`)
 - If port 4000 is taken on your machine, add `PORT=4100` (or any free port) to `.env`.
+- In development realtime has its own port, so tell the web app where it is: `NEXT_PUBLIC_REALTIME_URL=ws://localhost:4000` (or your `PORT`) in `apps/web/.env.local`. In production Caddy serves `/events` on the site's own address, so leave it unset.
 - `npm run check` needs no database. `npm run test:integration` runs the tests that need Postgres (after `npm run infra:up`); each run creates and drops its own database.
 - `npm run test:e2e` runs the Playwright tests in `apps/web/e2e`, starting the web dev server if one is not running. Like the dev server, the tests read `apps/web/.env.local`. Install the browser once with `npx playwright install chromium` in `apps/web`.
 - `card_state` is a cache of the answers in `review_log`. `npm run engine:check` verifies it; `npm run engine:rebuild` rewrites it with the active scheduler, which is how a scheduler change (such as placeholder → FSRS) reaches existing cards.
@@ -28,27 +29,27 @@ npm run dev           # web on :3000, realtime on :4000, worker
 
 The root `package.json` declares npm workspaces for `apps/*` and `packages/*`. Run installs from the repository root: npm installs dependencies and links local packages such as `@repo/contracts`. Each workspace has its own `package.json`; the root `package-lock.json` records resolved dependencies for the whole repo. Use `npm ci` for a clean install from that lockfile.
 
-Turborepo coordinates the workspace scripts and caches eligible results. The web app has accounts and a first review loop (a signed-in student answers their questions at `/review`); realtime echoes validated messages on sockets opened with a valid realtime token; and the worker connects to RabbitMQ without consuming jobs. Notes, question generation, collaboration, and the rest of the study features are planned.
+Turborepo coordinates the workspace scripts and caches eligible results. The web app has accounts, notes, and a first review loop (a signed-in student answers their questions at `/review`); realtime accepts sockets opened with a valid realtime token and forwards each user's events from RabbitMQ to them; and the worker consumes ingest jobs with retries and a parking lot. Question generation, collaboration, and the rest of the study features are planned.
 
 The [project documentation index](packages/docs/README.md) describes the current implementation and links to the build plan, task distribution, and product specifications.
 
 ## What's inside
 
-| Path                         | What it is                                                      |
-| ---------------------------- | --------------------------------------------------------------- |
-| `apps/web`                   | Next.js 16 app (App Router, Tailwind 4)                         |
-| `apps/realtime`              | HTTP + WebSocket server: `/health`, and token-checked `/events` |
-| `apps/worker`                | Background worker: RabbitMQ jobs, retries and a parking lot     |
-| `packages/contracts`         | Zod schemas shared by every app                                 |
-| `packages/db`                | Prisma client, schema, and SQL migrations                       |
-| `packages/eslint-config`     | Shared ESLint rules                                             |
-| `packages/messaging`         | RabbitMQ topology, publishing, retries and the consumer loop    |
-| `packages/realtime-token`    | Signs and verifies the token that opens `/events`               |
-| `packages/revision`          | Review pipeline: grading and `recordReview()`                   |
-| `packages/scheduler`         | Pure schedulers: placeholder, FSRS-6, SM-2                      |
-| `packages/typescript-config` | Shared `tsconfig` presets                                       |
-| `deploy/`                    | Production Compose stack, Caddyfile, VM scripts                 |
-| `docker-compose.yml`         | Local Postgres and RabbitMQ for development                     |
+| Path                         | What it is                                                   |
+| ---------------------------- | ------------------------------------------------------------ |
+| `apps/web`                   | Next.js 16 app (App Router, Tailwind 4)                      |
+| `apps/realtime`              | WebSocket server: token-checked `/events`, live user events  |
+| `apps/worker`                | Background worker: RabbitMQ jobs, retries and a parking lot  |
+| `packages/contracts`         | Zod schemas shared by every app                              |
+| `packages/db`                | Prisma client, schema, and SQL migrations                    |
+| `packages/eslint-config`     | Shared ESLint rules                                          |
+| `packages/messaging`         | RabbitMQ topology, publishing, retries and the consumer loop |
+| `packages/realtime-token`    | Signs and verifies the token that opens `/events`            |
+| `packages/revision`          | Review pipeline: grading and `recordReview()`                |
+| `packages/scheduler`         | Pure schedulers: placeholder, FSRS-6, SM-2                   |
+| `packages/typescript-config` | Shared `tsconfig` presets                                    |
+| `deploy/`                    | Production Compose stack, Caddyfile, VM scripts              |
+| `docker-compose.yml`         | Local Postgres and RabbitMQ for development                  |
 
 ## Commands
 

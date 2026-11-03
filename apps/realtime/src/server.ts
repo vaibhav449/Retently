@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { type HealthResponse, type WsEnvelope, wsEnvelopeSchema } from "@repo/contracts";
 import { verifyRealtimeToken } from "@repo/realtime-token";
-import { type RawData, type WebSocket, WebSocketServer } from "ws";
+import { type RawData, WebSocket, WebSocketServer } from "ws";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const MAX_MESSAGE_BYTES = 64 * 1024;
@@ -14,6 +14,8 @@ export interface RealtimeServerOptions {
 
 export interface RealtimeServer {
   server: Server;
+  /** Sends a message to every open socket of one user; returns how many got it. */
+  sendToUser: (userId: string, message: WsEnvelope) => number;
   close: () => Promise<void>;
 }
 
@@ -27,6 +29,8 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
   const startedAt = Date.now();
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
   const connections = new WeakMap<WebSocket, Connection>();
+  /** Every open socket per user: one user can have several tabs and devices. */
+  const byUser = new Map<string, Set<WebSocket>>();
 
   const server = createServer((req, res) => {
     if (req.method === "GET" && req.url === "/health") {
@@ -73,6 +77,13 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
   function onConnection(ws: WebSocket, userId: string) {
     const connection: Connection = { userId, alive: true };
     connections.set(ws, connection);
+    const sockets = byUser.get(userId) ?? new Set<WebSocket>();
+    sockets.add(ws);
+    byUser.set(userId, sockets);
+    ws.on("close", () => {
+      sockets.delete(ws);
+      if (sockets.size === 0 && byUser.get(userId) === sockets) byUser.delete(userId);
+    });
     ws.on("pong", () => {
       connection.alive = true;
     });
@@ -93,8 +104,19 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
     }
   }, HEARTBEAT_INTERVAL_MS);
 
+  function sendToUser(userId: string, message: WsEnvelope): number {
+    let sent = 0;
+    for (const ws of byUser.get(userId) ?? []) {
+      if (ws.readyState !== WebSocket.OPEN) continue;
+      send(ws, message);
+      sent++;
+    }
+    return sent;
+  }
+
   return {
     server,
+    sendToUser,
     close: () =>
       new Promise((resolve, reject) => {
         clearInterval(heartbeat);
