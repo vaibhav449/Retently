@@ -1,0 +1,68 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`chunkMarkdown on the fixture notes > chunks biology.md the same way every time 1`] = `
+[
+  {
+    "contentHash": "2cd15d0e2ac68a35b4e2ec042d2cbd60d66f00752b3951b04111276fa41bb265",
+    "heading": "Cell biology › Organelles",
+    "text": "Mitochondria are the site of aerobic respiration. They make most of the cell's ATP, which is why muscle cells, which use a lot of energy, have many of them.
+
+The nucleus holds the cell's DNA and controls which proteins the cell makes. It is surrounded by a double membrane called the nuclear envelope.
+
+Ribosomes build proteins.",
+    "words": 56,
+  },
+  {
+    "contentHash": "053a7311c7911c91855eafa0cce4332ac55d141697e1e6c5eec81e60cb412280",
+    "heading": "Cell biology › Membranes",
+    "text": "- The cell membrane is a phospholipid bilayer.
+- It is selectively permeable: small non-polar molecules cross it freely, while ions need channel proteins.
+- Cholesterol keeps it fluid at low temperatures.",
+    "words": 32,
+  },
+]
+`;
+
+exports[`chunkMarkdown on the fixture notes > chunks history.md the same way every time 1`] = `
+[
+  {
+    "contentHash": "187d3ddd27e2689e4e60497d1f772c78338b165d467a94131596d9e6175b4372",
+    "heading": "The French Revolution",
+    "text": "The French Revolution began in 1789, when financial crisis and food shortages led Louis XVI to call the Estates-General for the first time since 1614.",
+    "words": 25,
+  },
+  {
+    "contentHash": "fed16abeaf6787b984daf2cc1ac23096308a1a0fa6ef628b1e06590b5c395c88",
+    "heading": "The French Revolution › Causes",
+    "text": "Enlightenment ideas about popular sovereignty and equal rights spread through pamphlets and salons, and gave the Third Estate a language for its grievances against the privileges of the clergy and nobility.",
+    "words": 31,
+  },
+  {
+    "contentHash": "db81d5bb7e0616f4f9382dec015aa1fe7158112c5f4fbbb6bd717d0980f52652",
+    "heading": "The French Revolution › Causes › The storming of the Bastille",
+    "text": "On 14 July 1789 a Paris crowd stormed the Bastille, a royal fortress and prison, to seize gunpowder. The day is now France's national holiday.",
+    "words": 25,
+  },
+]
+`;
+
+exports[`chunkMarkdown on the fixture notes > chunks programming.md the same way every time 1`] = `
+[
+  {
+    "contentHash": "c83536287bbde9018a50f80d3649951f220bcb557800801bd496ef4f8be5d179",
+    "heading": "Closures in JavaScript",
+    "text": "A closure is a function together with the variables it captured from the scope where it was created. The function keeps access to those variables even after the outer function has returned.
+
+\`\`\`js
+function counter() {
+  let count = 0;
+
+  return () => ++count;
+}
+\`\`\`
+
+Each call to \`counter()\` creates a new \`count\`, so two counters never share state. This is how modules hid private variables before JavaScript had classes and private fields.",
+    "words": 74,
+  },
+]
+`;

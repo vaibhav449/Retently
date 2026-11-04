@@ -10,3 +10,5 @@ export {
 } from "./generate";
 export { defaultModel, type LlmFeature, MODEL_IDS, type Model } from "./models";
 export { costUsd, priceOf, UnknownModelPriceError } from "./prices";
+/** Thrown when the model's reply does not match the schema; its tokens are already logged. */
+export { NoObjectGeneratedError } from "ai";

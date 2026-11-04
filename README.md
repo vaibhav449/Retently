@@ -43,6 +43,7 @@ The [project documentation index](packages/docs/README.md) describes the current
 | `packages/contracts`         | Zod schemas shared by every app                              |
 | `packages/db`                | Prisma client, schema, and SQL migrations                    |
 | `packages/eslint-config`     | Shared ESLint rules                                          |
+| `packages/ingest`            | Note → chunks → MCQs: `ingestSource()`                       |
 | `packages/llm`               | The one way to call an LLM: daily budget and `llm_usage` log |
 | `packages/messaging`         | RabbitMQ topology, publishing, retries and the consumer loop |
 | `packages/realtime-token`    | Signs and verifies the token that opens `/events`            |
