@@ -50,6 +50,21 @@ export function getDocument(db: Database, userId: string, documentId: string) {
   });
 }
 
+/** The id of the note's `sources` row, which questions hang off. Null when the user does not own it. */
+export async function getDocumentSourceId(
+  db: Database,
+  userId: string,
+  documentId: string,
+): Promise<string | null> {
+  const where = ownedBy(userId, documentId);
+  if (!where) return null;
+  const document = await db.document.findFirst({
+    where,
+    select: { source: { select: { id: true } } },
+  });
+  return document?.source?.id ?? null;
+}
+
 /** Renames the note and its source together. False when the user does not own it. */
 export async function renameDocument(
   db: Database,

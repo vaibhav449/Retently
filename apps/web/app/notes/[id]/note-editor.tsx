@@ -14,6 +14,7 @@ import { Bold, Heading2, Heading3, Italic, List, ListOrdered, type LucideIcon } 
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { GenerateQuestions } from "./generate-questions";
 import { type SaveStatus, useAutosave } from "./use-autosave";
 
 /**
@@ -41,7 +42,7 @@ interface NoteEditorProps {
 /** The note's TipTap editor. Every change is autosaved as TipTap JSON and Markdown. */
 export function NoteEditor({ documentId, initialContent, initialVersion }: NoteEditorProps) {
   const autosave = useAutosave(documentId, initialVersion);
-  const { schedule } = autosave;
+  const { schedule, flush } = autosave;
 
   const editor = useEditor({
     extensions: [StarterKit, Markdown, UniqueID.configure({ types: BLOCK_TYPES })],
@@ -105,6 +106,9 @@ export function NoteEditor({ documentId, initialContent, initialVersion }: NoteE
           Loading the editor…
         </div>
       )}
+      <div className="pt-4">
+        <GenerateQuestions documentId={documentId} flush={flush} disabled={!editor || locked} />
+      </div>
     </div>
   );
 }
