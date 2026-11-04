@@ -59,3 +59,18 @@ export type SaveDocumentContentRequest = z.infer<typeof saveDocumentContentReque
 export type SaveDocumentContentResponse = z.infer<typeof saveDocumentContentResponseSchema>;
 export type DocumentVersionConflict = z.infer<typeof documentVersionConflictSchema>;
 export type UpdateDocumentRequest = z.infer<typeof updateDocumentRequestSchema>;
+
+/** What one "Generate questions" click did: the ingest run's result (seam 2), as sent to the note page. */
+export const generateQuestionsResponseSchema = z.strictObject({
+  /** Passages in the note long enough to ask about. */
+  chunks: z.number().int().nonnegative(),
+  items_created: z.number().int().nonnegative(),
+  /** Passages that already had a question, so nothing was generated for them. */
+  items_skipped: z.number().int().nonnegative(),
+  /** The student's daily LLM budget ran out during the run. */
+  budget_exhausted: z.boolean(),
+  /** Passages still without a question; another click (or tomorrow's budget) picks them up. */
+  chunks_pending: z.number().int().nonnegative(),
+});
+
+export type GenerateQuestionsResponse = z.infer<typeof generateQuestionsResponseSchema>;
