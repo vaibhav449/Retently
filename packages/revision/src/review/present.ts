@@ -5,6 +5,7 @@ import {
   type SessionProgress,
 } from "@repo/contracts";
 import { type Database, itemsReadableBy } from "@repo/db";
+import { effectiveDueAt } from "../misconception";
 import type { Clock } from "../record/recordReview";
 import { signPresentationToken } from "../record/token";
 import { uuidv7 } from "../record/uuidv7";
@@ -28,19 +29,54 @@ function reviewableBy(userId: string) {
   };
 }
 
+interface DueCard {
+  itemId: string;
+  dueAt: Date;
+  misconceptionUntil: Date | null;
+}
+
+/** The card that comes first by (effective due date, item id); either may be missing. */
+function earlier(a: DueCard | null, b: DueCard | null): DueCard | null {
+  if (a === null || b === null) return a ?? b;
+  const byDue = effectiveDueAt(a).getTime() - effectiveDueAt(b).getTime();
+  if (byDue !== 0) return byDue < 0 ? a : b;
+  return a.itemId <= b.itemId ? a : b;
+}
+
 /**
- * GET /api/review/next for Phase 1: the user's earliest-due card, else their oldest new MCQ, else
- * nothing. Daily sessions, budgets and the ranker replace this in Phase 3.
+ * The user's card with the earliest effective due date (05 §6.2) that is due by `now`, among
+ * reviewable items, or null. Two indexed queries, one per column (DD-10): the earliest card
+ * overall heads one of them, since min(min due_at, min until) = min over cards of min(due_at,
+ * until). Both keep itemsReadableBy as the only definition of access (03 §7.1).
+ */
+async function earliestDue(db: Database, userId: string, now: Date): Promise<DueCard | null> {
+  const item = reviewableBy(userId);
+  const select = { itemId: true, dueAt: true, misconceptionUntil: true } as const;
+  const [byDueAt, byOverride] = await Promise.all([
+    db.cardState.findFirst({
+      where: { userId, dueAt: { lte: now }, item },
+      orderBy: [{ dueAt: "asc" }, { itemId: "asc" }],
+      select,
+    }),
+    db.cardState.findFirst({
+      where: { userId, misconceptionUntil: { lte: now }, item },
+      orderBy: [{ misconceptionUntil: "asc" }, { itemId: "asc" }],
+      select,
+    }),
+  ]);
+  return earlier(byDueAt, byOverride);
+}
+
+/**
+ * GET /api/review/next for Phase 1: the user's earliest-due card by effective due date (a passed
+ * misconception override counts as due, R4.1), else their oldest new MCQ, else nothing. Daily
+ * sessions, budgets and the ranker replace this in Phase 3.
  */
 export async function presentNext(userId: string, deps: PresentDeps): Promise<ReviewNextResponse> {
   const now = deps.clock.now();
   const reviewable = reviewableBy(userId);
 
-  const due = await deps.db.cardState.findFirst({
-    where: { userId, dueAt: { lte: now }, item: reviewable },
-    orderBy: [{ dueAt: "asc" }, { itemId: "asc" }],
-    select: { itemId: true, misconceptionUntil: true },
-  });
+  const due = await earliestDue(deps.db, userId, now);
   const fresh = due
     ? null
     : await deps.db.item.findFirst({
@@ -66,7 +102,8 @@ export async function presentNext(userId: string, deps: PresentDeps): Promise<Re
     state: "ok",
     item: {
       presentation_token: presentationToken,
-      category: due === null ? "new" : due.misconceptionUntil ? "misconception" : "review",
+      // An open misconception, however the card became due (DD-11).
+      category: due === null ? "new" : due.misconceptionUntil !== null ? "misconception" : "review",
       item: {
         id: item.id,
         type: item.type,
@@ -84,7 +121,14 @@ async function progressToday(db: Database, userId: string, now: Date): Promise<S
   const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const [done, due, fresh] = await Promise.all([
     db.reviewLog.count({ where: { userId, context: "solo", reviewedAt: { gte: startOfDay } } }),
-    db.cardState.count({ where: { userId, dueAt: { lte: now }, item: reviewable } }),
+    // Due by effective due date: due_at or a passed misconception override.
+    db.cardState.count({
+      where: {
+        userId,
+        OR: [{ dueAt: { lte: now } }, { misconceptionUntil: { lte: now } }],
+        item: reviewable,
+      },
+    }),
     db.item.count({ where: { ...reviewable, cardStates: { none: { userId } } } }),
   ]);
   return { done, planned: done + due + fresh };

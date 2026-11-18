@@ -4,7 +4,7 @@ import { createDefaultRegistry, DEFAULT_GRADING } from "../config";
 import { ReviewError, type ReviewErrorCode } from "../errors";
 import { signPresentationToken, verifyPresentationToken } from "../record/token";
 import { uuidv7 } from "../record/uuidv7";
-import { seedUserWithMcq } from "../test/seed";
+import { type SeededMcq, seedMcq, seedUser, seedUserWithMcq } from "../test/seed";
 import { answerReview } from "./answer";
 import { presentNext } from "./present";
 
@@ -20,7 +20,8 @@ afterAll(() => close());
 const SECRET = "test-review-token-secret-at-least-32-chars";
 const T0 = new Date("2026-10-22T09:00:00.000Z");
 const SECOND = 1000;
-const DAY = 24 * 60 * 60 * SECOND;
+const HOUR = 60 * 60 * SECOND;
+const DAY = 24 * HOUR;
 const at = (ms: number) => new Date(T0.getTime() + ms);
 
 const present = (userId: string, now: Date) =>
@@ -241,5 +242,203 @@ describe("POST /api/review/answer (answerReview)", () => {
     );
     expect(await errorCode(answer(someoneElse.userId, good, at(5 * SECOND)))).toBe("invalid_token");
     expect(await db.reviewLog.count({ where: { userId: seeded.userId } })).toBe(0);
+  });
+});
+
+// ─── VS1: the misconception override in GET /next and in the answer (R4.1, R6.1) ───
+
+/** 21:00 IST on 18 Nov 2026, and the next IST midnight. */
+const NINE_PM_IST = new Date("2026-11-18T15:30:00.000Z");
+const MIDNIGHT_IST = new Date("2026-11-18T18:30:00.000Z");
+const plus = (instant: Date, ms: number) => new Date(instant.getTime() + ms);
+
+/** Presents the next item at `now` and answers it `option` with `confidence` 5 s later. */
+async function presentAndAnswer(
+  seeded: Pick<SeededMcq, "userId">,
+  option: string,
+  now: Date,
+  confidence: "sure" | "think_so" | "no_idea" = "sure",
+) {
+  const next = await presentOk(seeded.userId, now);
+  const result = await answer(
+    seeded.userId,
+    {
+      presentation_token: next.item.presentation_token,
+      confidence,
+      response: { kind: "mcq", option_id: option },
+      client_latency_ms: 3000,
+    },
+    plus(now, 5 * SECOND),
+  );
+  if (result.status !== "graded") throw new Error("expected a graded answer");
+  return { next, result: result.result };
+}
+
+/** A card_state row for a card that was never answered: only what GET /next reads matters. */
+async function seedCardState(
+  userId: string,
+  itemId: string,
+  dueAt: Date,
+  misconceptionUntil: Date | null,
+) {
+  await db.cardState.create({
+    data: {
+      userId,
+      itemId,
+      schedulerVersion: "fsrs6-v1",
+      state: {
+        kind: "fsrs",
+        difficulty: 5,
+        stability: 100,
+        last_review_at: plus(dueAt, -100 * DAY).toISOString(),
+        due_at: dueAt.toISOString(),
+        reps: 5,
+        lapses: 0,
+        scheduled_days: 100,
+      },
+      dueAt,
+      misconceptionUntil,
+      updatedAt: plus(dueAt, -100 * DAY),
+    },
+  });
+}
+
+describe("GET /api/review/next with the misconception override (R4.1, DD-10, DD-11)", () => {
+  it("offers a 21:00 Sure + wrong again from exactly the next local midnight, as a Retest", async () => {
+    const seeded = await seedUserWithMcq(db);
+    await presentAndAnswer(seeded, seeded.wrong, NINE_PM_IST);
+
+    expect(await present(seeded.userId, plus(MIDNIGHT_IST, -1))).toEqual({ state: "nothing_due" });
+    const retest = await presentOk(seeded.userId, MIDNIGHT_IST);
+    expect(retest.item).toMatchObject({ category: "misconception", item: { id: seeded.itemId } });
+    // Done counts since UTC midnight (D-30); planned counts the override-due card.
+    expect(retest.progress).toEqual({ done: 1, planned: 2 });
+  });
+
+  it("AC2: offers the S 100 card the next local day, though FSRS says 4 days", async () => {
+    const seeded = await seedUserWithMcq(db);
+    await seedCardState(seeded.userId, seeded.itemId, NINE_PM_IST, null);
+    const { next } = await presentAndAnswer(seeded, seeded.wrong, NINE_PM_IST);
+    expect(next.item.category).toBe("review");
+
+    const row = await db.cardState.findUniqueOrThrow({
+      where: { userId_itemId: { userId: seeded.userId, itemId: seeded.itemId } },
+    });
+    expect(row.dueAt.getTime() - NINE_PM_IST.getTime()).toBeGreaterThan(3 * DAY);
+    expect(await present(seeded.userId, plus(MIDNIGHT_IST, -1))).toEqual({ state: "nothing_due" });
+    expect((await presentOk(seeded.userId, MIDNIGHT_IST)).item.category).toBe("misconception");
+  });
+
+  it("picks the card with the earlier effective due date, whichever column makes it due", async () => {
+    const now = plus(NINE_PM_IST, 10 * DAY);
+    const farAway = plus(now, 30 * DAY);
+
+    const overrideFirst = await seedUser(db);
+    const a = await seedMcq(db, overrideFirst);
+    const b = await seedMcq(db, overrideFirst);
+    await seedCardState(overrideFirst, a.itemId, farAway, plus(now, -2 * HOUR));
+    await seedCardState(overrideFirst, b.itemId, plus(now, -1 * HOUR), null);
+    expect((await presentOk(overrideFirst, now)).item).toMatchObject({
+      category: "misconception",
+      item: { id: a.itemId },
+    });
+
+    const dueFirst = await seedUser(db);
+    const c = await seedMcq(db, dueFirst);
+    const d = await seedMcq(db, dueFirst);
+    await seedCardState(dueFirst, c.itemId, farAway, plus(now, -1 * HOUR));
+    await seedCardState(dueFirst, d.itemId, plus(now, -2 * HOUR), null);
+    expect((await presentOk(dueFirst, now)).item).toMatchObject({
+      category: "review",
+      item: { id: d.itemId },
+    });
+    expect((await presentOk(dueFirst, now)).progress).toEqual({ done: 0, planned: 2 });
+  });
+
+  it("calls a card with an open misconception a Retest even when due_at made it due (E5)", async () => {
+    const userId = await seedUser(db);
+    const { itemId } = await seedMcq(db, userId);
+    const now = plus(NINE_PM_IST, 10 * DAY);
+    await seedCardState(userId, itemId, plus(now, -2 * HOUR), plus(now, HOUR));
+    expect((await presentOk(userId, now)).item.category).toBe("misconception");
+  });
+
+  it("breaks equal effective due dates by item id (E22)", async () => {
+    const userId = await seedUser(db);
+    const ids = [(await seedMcq(db, userId)).itemId, (await seedMcq(db, userId)).itemId].sort();
+    const now = plus(NINE_PM_IST, 10 * DAY);
+    const due = plus(now, -HOUR);
+    // The larger id is due by its override, the smaller by due_at, at the same instant.
+    await seedCardState(userId, ids[1] as string, plus(now, 30 * DAY), due);
+    await seedCardState(userId, ids[0] as string, due, null);
+    expect((await presentOk(userId, now)).item.item.id).toBe(ids[0]);
+  });
+
+  it("never offers a passed override on a retired item or one the user can no longer read (E21)", async () => {
+    const now = plus(NINE_PM_IST, 10 * DAY);
+    const owner = await seedUserWithMcq(db);
+    const retired = await seedUserWithMcq(db);
+    await seedCardState(retired.userId, retired.itemId, plus(now, 30 * DAY), plus(now, -HOUR));
+    await db.item.update({ where: { id: retired.itemId }, data: { retiredAt: now } });
+    expect(await present(retired.userId, now)).toEqual({ state: "nothing_due" });
+
+    const outsider = await seedUser(db);
+    await seedCardState(outsider, owner.itemId, plus(now, 30 * DAY), plus(now, -HOUR));
+    expect(await present(outsider, now)).toEqual({ state: "nothing_due" });
+  });
+
+  it("after the retest, does not offer the card again until its FSRS due date", async () => {
+    const seeded = await seedUserWithMcq(db);
+    await presentAndAnswer(seeded, seeded.wrong, NINE_PM_IST);
+    const { result } = await presentAndAnswer(seeded, seeded.right, MIDNIGHT_IST, "think_so");
+
+    const dueAt = new Date(result.next_due_at);
+    expect(await present(seeded.userId, plus(MIDNIGHT_IST, HOUR))).toEqual({
+      state: "nothing_due",
+    });
+    expect(await present(seeded.userId, plus(dueAt, -1))).toEqual({ state: "nothing_due" });
+    expect((await presentOk(seeded.userId, dueAt)).item.category).toBe("review");
+  });
+});
+
+describe("POST /api/review/answer after a Sure + wrong (R6.1, DD-12)", () => {
+  it("returns the misconception block, unchanged in shape", async () => {
+    const seeded = await seedUserWithMcq(db);
+    const { result } = await presentAndAnswer(seeded, seeded.wrong, NINE_PM_IST);
+    expect(result.misconception).toEqual({
+      your_answer: "Ribosome",
+      correct_answer: "Mitochondrion",
+      citation: result.citation,
+    });
+  });
+
+  it("reports the next local midnight as the next review of the S 100 card: tomorrow", async () => {
+    const seeded = await seedUserWithMcq(db);
+    await seedCardState(seeded.userId, seeded.itemId, NINE_PM_IST, null);
+    const { result } = await presentAndAnswer(seeded, seeded.wrong, NINE_PM_IST);
+    expect(result).toMatchObject({
+      grade: 1,
+      next_due_at: MIDNIGHT_IST.toISOString(),
+      scheduled_days: 1,
+    });
+  });
+
+  it("returns the block and the same next review again on an idempotent replay (E12)", async () => {
+    const seeded = await seedUserWithMcq(db);
+    const next = await presentOk(seeded.userId, NINE_PM_IST);
+    const body = {
+      presentation_token: next.item.presentation_token,
+      confidence: "sure",
+      response: { kind: "mcq", option_id: seeded.wrong },
+      client_latency_ms: 3000,
+    };
+    const first = await answer(seeded.userId, body, plus(NINE_PM_IST, 5 * SECOND));
+    const again = await answer(seeded.userId, body, plus(NINE_PM_IST, 6 * SECOND));
+    if (first.status !== "graded" || again.status !== "graded") throw new Error("not graded");
+
+    expect(again.result.idempotent_replay).toBe(true);
+    expect(again.result.misconception).toEqual(first.result.misconception);
+    expect(again.result.next_due_at).toBe(MIDNIGHT_IST.toISOString());
+    expect(again.result.scheduled_days).toBe(1);
   });
 });

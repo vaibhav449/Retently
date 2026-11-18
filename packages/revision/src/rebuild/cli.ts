@@ -7,7 +7,7 @@ import { checkCardState, rebuildAll } from "./replay";
 
 /**
  * npm run engine:rebuild: replay every card's log through the active scheduler.
- * npm run engine:check:   verify invariant I2 without writing; exits 1 on any mismatch.
+ * npm run engine:check:   verify invariants I2 and I4 without writing; exits 1 on any mismatch.
  */
 const command = process.argv[2];
 if (command !== "rebuild" && command !== "check") {

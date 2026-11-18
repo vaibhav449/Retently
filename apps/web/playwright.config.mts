@@ -29,5 +29,9 @@ export default defineConfig({
     url: `${baseURL}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    // Lets a test shift the review clock with a request header (lib/review-engine.ts). A dev
+    // server you started yourself and that Playwright reuses needs REVIEW_TEST_CLOCK=1 too
+    // (in .env.local), or the misconception test fails on the missing x-review-clock header.
+    env: { REVIEW_TEST_CLOCK: "1" },
   },
 });
