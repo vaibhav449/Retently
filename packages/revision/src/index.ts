@@ -1,7 +1,34 @@
-export { createDefaultRegistry, DEFAULT_GRADING, systemClock } from "./config";
+export {
+  createDefaultRegistry,
+  DEFAULT_GRADING,
+  DEFAULT_TIME_ZONE,
+  LATENCY_MEDIAN_CACHE_MAX_ENTRIES,
+  LATENCY_MEDIAN_CACHE_TTL_MS,
+  systemClock,
+} from "./config";
 export { REVIEW_ERROR_STATUS, ReviewError, type ReviewErrorCode } from "./errors";
 export { type GradableItem, gradeLocally } from "./grading/gradeResponse";
-export { type GradeResult, type GradingConfig, mapGrade, type Signals } from "./grading/mapping";
+export {
+  cachedLatencyMedians,
+  type LatencyMedianSource,
+  latencyMediansFromDb,
+  type MedianQuery,
+  median,
+} from "./grading/latency";
+export {
+  type GradeResult,
+  type GradingConfig,
+  type LatencyConfig,
+  mapGrade,
+  type Signals,
+  speedMatters,
+} from "./grading/mapping";
+export {
+  effectiveDueAt,
+  isMisconception,
+  misconceptionUntilAfter,
+  type ReviewFacts,
+} from "./misconception";
 export {
   type Clock,
   type RecordReviewDeps,
@@ -28,3 +55,5 @@ export {
 export { type AnswerDeps, answerReview } from "./review/answer";
 export { type PresentDeps, presentNext } from "./review/present";
 export { shuffleBySeed } from "./review/shuffle";
+export { userTimeZone } from "./settings";
+export { resolveTimeZone, startOfNextLocalDay } from "./time";

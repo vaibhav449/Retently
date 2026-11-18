@@ -94,3 +94,56 @@ test("a confident wrong answer shows what the notes say and is recorded as a mis
   const log = await db.reviewLog.findFirstOrThrow({ where: { userId: studentId } });
   expect(log).toMatchObject({ confidence: "sure", correct: false, grade: 1 });
 });
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Asia/Kolkata is UTC+05:30 all year, with no DST. */
+const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+
+/** The first IST midnight after `at`, worked out without the engine's own helper. */
+function nextIstMidnight(at: Date): Date {
+  const istDay = Math.floor((at.getTime() + IST_OFFSET_MS) / DAY_MS);
+  return new Date((istDay + 1) * DAY_MS - IST_OFFSET_MS);
+}
+
+test("a confident wrong answer comes back at the start of the next local day", async ({
+  page,
+  studentId,
+}) => {
+  // A new student has no revision_settings row, so their day is the IST day.
+  const mcq = await seedMcq(db, studentId);
+  await page.goto("/review");
+
+  await page.getByRole("button", { name: "Sure" }).click();
+  await page.getByRole("button", { name: mcq.wrong }).click();
+  await expect(page.getByText("Not quite", { exact: true })).toBeVisible();
+  // FSRS alone could say more days; the override brings it back tomorrow.
+  await expect(page.getByText(/^Next review tomorrow/)).toBeVisible();
+
+  const log = await db.reviewLog.findFirstOrThrow({ where: { userId: studentId } });
+  const card = await db.cardState.findUniqueOrThrow({
+    where: { userId_itemId: { userId: studentId, itemId: mcq.itemId } },
+  });
+  const until = nextIstMidnight(log.reviewedAt);
+  expect(card.misconceptionUntil).toEqual(until);
+
+  await page.getByRole("button", { name: "Next question" }).click();
+  await expect(page.getByText("Nothing to review right now")).toBeVisible();
+
+  /** Reloads with the server's review clock shifted so that "now" is `target`. */
+  async function reloadAt(target: number) {
+    await page.setExtraHTTPHeaders({ "x-review-clock-offset-ms": String(target - Date.now()) });
+    const next = page.waitForResponse((response) => response.url().endsWith("/api/review/next"));
+    await page.reload();
+    // Without REVIEW_TEST_CLOCK=1 on the dev server the offset is ignored: fail clearly.
+    expect((await next).headers()["x-review-clock"], "REVIEW_TEST_CLOCK=1 on the server").toBe(
+      "offset",
+    );
+  }
+
+  await reloadAt(until.getTime() - 60_000);
+  await expect(page.getByText("Nothing to review right now")).toBeVisible();
+
+  await reloadAt(until.getTime() + 60_000);
+  await expect(page.getByRole("heading", { name: mcq.prompt })).toBeVisible();
+  await expect(page.getByText(/^Retest · /)).toBeVisible();
+});

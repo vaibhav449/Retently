@@ -8,6 +8,7 @@ import {
 } from "@repo/contracts";
 import { daysBetween } from "@repo/scheduler";
 import { ReviewError } from "../errors";
+import { effectiveDueAt } from "../misconception";
 import { type RecordReviewDeps, recordReview } from "../record/recordReview";
 import { verifyPresentationToken } from "../record/token";
 
@@ -90,6 +91,7 @@ export async function answerReview(
     }),
   ]);
   const citation = citationFor(item.sourceChunk);
+  const { nextDueAt, scheduledDays } = nextReview(outcome, now);
 
   return reviewAnswerResponseSchema.parse({
     status: "graded",
@@ -101,8 +103,8 @@ export async function answerReview(
       citation,
       grade: outcome.grade,
       retrievability_before: outcome.retrievabilityBefore,
-      next_due_at: outcome.nextDueAt.toISOString(),
-      scheduled_days: Math.max(0, Math.round(daysBetween(outcome.nextDueAt, now))),
+      next_due_at: nextDueAt.toISOString(),
+      scheduled_days: scheduledDays,
       ...(outcome.misconception && {
         misconception: {
           your_answer: answerText(logged.response, item.options),
@@ -113,6 +115,28 @@ export async function answerReview(
       idempotent_replay: outcome.idempotentReplay,
     },
   });
+}
+
+/**
+ * When the card comes back (05 §8.2, DD-12): its effective due date. With an open misconception
+ * that is the next local midnight, reported as at least 1 day so the UI says "tomorrow" rather
+ * than the scheduler's "in 4 days". Every other answer reports the scheduler's due date, as before.
+ */
+function nextReview(
+  outcome: { nextDueAt: Date; misconceptionUntil: Date | null },
+  now: Date,
+): { nextDueAt: Date; scheduledDays: number } {
+  if (outcome.misconceptionUntil === null) {
+    return {
+      nextDueAt: outcome.nextDueAt,
+      scheduledDays: Math.max(0, Math.round(daysBetween(outcome.nextDueAt, now))),
+    };
+  }
+  const nextDueAt = effectiveDueAt({
+    dueAt: outcome.nextDueAt,
+    misconceptionUntil: outcome.misconceptionUntil,
+  });
+  return { nextDueAt, scheduledDays: Math.max(1, Math.round(daysBetween(nextDueAt, now))) };
 }
 
 interface ChunkWithSource {

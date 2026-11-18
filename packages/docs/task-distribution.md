@@ -236,8 +236,8 @@ Planned: add CODEOWNERS mirroring this table; the repository does not include th
 
 **Vaibhav**
 
-- [ ] Fast vs slow: a rolling median latency per user and item type, excluding duel answers
-- [ ] Misconception override: _Sure_ + wrong → due tomorrow regardless of FSRS (`misconception_until`)
+- [x] Fast vs slow: a rolling median latency per user and item type, excluding duel answers
+- [x] Misconception override: _Sure_ + wrong → due tomorrow regardless of FSRS (`misconception_until`)
 - [ ] Queue ranker:
   - the priority formula (v0.2 §7.5)
   - a minute budget
