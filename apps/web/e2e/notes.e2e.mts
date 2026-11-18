@@ -49,7 +49,8 @@ test("a student creates, renames and deletes a note", async ({ page, studentId }
   const title = page.getByLabel("Title");
   await title.fill("Cell biology");
   await title.press("Enter");
-  await expect(page.getByText("Saving…")).toBeHidden();
+  // The editor's autosave status says "Saving…" too, so wait until no save is in flight at all.
+  await expect(page.getByText("Saving…")).toHaveCount(0);
   await expect
     .poll(async () => (await db.source.findUniqueOrThrow({ where: { id: source.id } })).title)
     .toBe("Cell biology");
@@ -65,7 +66,8 @@ test("a student creates, renames and deletes a note", async ({ page, studentId }
   expect(await db.source.count({ where: { id: source.id } })).toBe(0);
 });
 
-test("a note's text is autosaved and survives a reload", async ({ page }) => {
+// Takes studentId, like every test here that opens /notes: the fixture is what signs the page in.
+test("a note's text is autosaved and survives a reload", async ({ page, studentId }) => {
   await page.goto("/notes");
   await page.getByRole("button", { name: "New note" }).click();
   await expect(page).toHaveURL(/\/notes\/[0-9a-f-]{36}$/);
@@ -80,24 +82,30 @@ test("a note's text is autosaved and survives a reload", async ({ page }) => {
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
 
   const saved = await db.document.findUniqueOrThrow({ where: { id } });
-  expect(saved.contentMd).toBe("## Cells\n\nMitochondria make most of the cell's ATP.");
+  expect(saved.ownerId).toBe(studentId);
+  // StarterKit's TrailingNode keeps an empty paragraph at the end of the document, which the
+  // Markdown ends with as a blank line. Only the blocks with text matter here.
+  expect(saved.contentMd.trimEnd()).toBe("## Cells\n\nMitochondria make most of the cell's ATP.");
   expect(saved.version).toBeGreaterThan(0);
-  const blocks = (saved.contentJson as { content: { type: string; attrs: { id: string } }[] })
-    .content;
-  expect(blocks.map((block) => block.type)).toEqual(["heading", "paragraph"]);
+  const blocks = (
+    saved.contentJson as { content: { type: string; attrs: { id: string }; content?: unknown[] }[] }
+  ).content;
+  const withText = blocks.filter((block) => block.content !== undefined);
+  expect(withText.map((block) => block.type)).toEqual(["heading", "paragraph"]);
   for (const block of blocks) expect(block.attrs.id).toEqual(expect.any(String));
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "Cells" })).toBeVisible();
   await expect(editor).toContainText("Mitochondria make most of the cell's ATP.");
 
-  // Editing again keeps the block ids that chunks will point at.
-  await editor.click();
-  await page.keyboard.press("ControlOrMeta+End");
+  // Editing again keeps the block ids that chunks will point at. End of the sentence, not of the
+  // document: the document ends in the trailing empty paragraph.
+  await editor.getByText("Mitochondria make most of the cell's ATP.").click();
+  await page.keyboard.press("End");
   await page.keyboard.type(" It has two membranes.");
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
   await expect
-    .poll(async () => (await db.document.findUniqueOrThrow({ where: { id } })).contentMd)
+    .poll(async () => (await db.document.findUniqueOrThrow({ where: { id } })).contentMd.trimEnd())
     .toBe("## Cells\n\nMitochondria make most of the cell's ATP. It has two membranes.");
   const edited = await db.document.findUniqueOrThrow({ where: { id } });
   const editedBlocks = (edited.contentJson as { content: { attrs: { id: string } }[] }).content;
