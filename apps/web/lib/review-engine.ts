@@ -1,11 +1,14 @@
 import {
   cachedLatencyMedians,
   type Clock,
+  createDefaultRegistry,
   DEFAULT_GRADING,
+  DEFAULT_QUEUE,
   LATENCY_MEDIAN_CACHE_MAX_ENTRIES,
   LATENCY_MEDIAN_CACHE_TTL_MS,
   type LatencyMedianSource,
   latencyMediansFromDb,
+  type SessionDeps,
   systemClock,
 } from "@repo/revision";
 import { getDb } from "./db";
@@ -56,4 +59,23 @@ export function reviewClock(
 /** The headers every review response carries; marks a shifted clock. */
 export function reviewHeaders(shifted: boolean): Record<string, string> {
   return { "cache-control": "no-store", ...(shifted && { [REVIEW_CLOCK_HEADER]: "offset" }) };
+}
+
+/**
+ * What the daily-session routes give the engine (06-queue-ranker.md §8): the request's review clock,
+ * so the E2E test clock moves the local day too, and the process's cached latency medians (QD-8).
+ */
+export function sessionDeps(request: Request): { deps: SessionDeps; shifted: boolean } {
+  const { clock, shifted } = reviewClock(request);
+  return {
+    deps: {
+      db: getDb(),
+      clock,
+      registry: createDefaultRegistry(),
+      grading: DEFAULT_GRADING,
+      queue: DEFAULT_QUEUE,
+      medians: latencyMedians(),
+    },
+    shifted,
+  };
 }

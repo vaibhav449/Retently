@@ -27,12 +27,27 @@ export default async function setup(project: TestProject) {
     );
   }
 
-  const name = `revision_test_${Date.now()}_${process.pid}`;
-  const admin = new pg.Client({ connectionString: baseUrl });
+  const scratch = await createMigratedDatabase(
+    baseUrl,
+    `revision_test_${Date.now()}_${process.pid}`,
+  );
+  project.provide("databaseUrl", scratch.url);
+  return scratch.drop;
+}
+
+/**
+ * A new database named `name` on the server of `adminUrl`, with every migration applied. `drop`
+ * removes it. Also used by tests that need a database of their own (the performance test).
+ */
+export async function createMigratedDatabase(
+  adminUrl: string,
+  name: string,
+): Promise<{ url: string; drop: () => Promise<void> }> {
+  const admin = new pg.Client({ connectionString: adminUrl });
   await admin.connect();
   await admin.query(`CREATE DATABASE "${name}"`);
 
-  const url = new URL(baseUrl);
+  const url = new URL(adminUrl);
   url.pathname = `/${name}`;
   const client = new pg.Client({ connectionString: url.toString() });
   await client.connect();
@@ -45,10 +60,11 @@ export default async function setup(project: TestProject) {
   }
   await client.end();
 
-  project.provide("databaseUrl", url.toString());
-
-  return async () => {
-    await admin.query(`DROP DATABASE "${name}" WITH (FORCE)`);
-    await admin.end();
+  return {
+    url: url.toString(),
+    drop: async () => {
+      await admin.query(`DROP DATABASE "${name}" WITH (FORCE)`);
+      await admin.end();
+    },
   };
 }

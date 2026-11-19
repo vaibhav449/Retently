@@ -64,6 +64,20 @@ export function startOfNextLocalDay(at: Date, timeZone: string): Date {
 }
 
 /**
+ * The calendar date of `at` in `timeZone`, as "YYYY-MM-DD": review_sessions.local_date
+ * (06-queue-ranker.md §8). `timeZone` must be valid: pass it through resolveTimeZone() first.
+ */
+export function localDateOf(at: Date, timeZone: string): string {
+  const ms = at.getTime();
+  if (!Number.isFinite(ms)) throw new RangeError("localDateOf: invalid date");
+  const yyyymmdd = localDate(ms, formatterFor(timeZone));
+  const year = String(Math.floor(yyyymmdd / 10_000)).padStart(4, "0");
+  const month = String(Math.floor(yyyymmdd / 100) % 100).padStart(2, "0");
+  const day = String(yyyymmdd % 100).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * `value` if Intl accepts it as a time zone, else DEFAULT_TIME_ZONE. The one resolver used by
  * recordReview(), rebuild and check, so a bad settings value never fails a review and never
  * makes the live path and the replay disagree (I4).

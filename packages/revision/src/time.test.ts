@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TIME_ZONE } from "./config";
-import { resolveTimeZone, startOfNextLocalDay } from "./time";
+import { localDateOf, resolveTimeZone, startOfNextLocalDay } from "./time";
 
 /**
  * 05-review-pipeline.md §6.2, IMPLEMENTATION_PLAN §4.7. Each expected value was checked against a
@@ -120,7 +120,7 @@ const VECTORS: { zone: string; at: string; expected: string; why: string }[] = [
 const oracleFormatters = new Map<string, Intl.DateTimeFormat>();
 
 /** An independent oracle: the local calendar date as "yyyy-mm-dd", which sorts like the date. */
-function localDateOf(ms: number, timeZone: string): string {
+function oracleLocalDate(ms: number, timeZone: string): string {
   let formatter = oracleFormatters.get(timeZone);
   if (formatter === undefined) {
     formatter = new Intl.DateTimeFormat("en-US", {
@@ -170,10 +170,10 @@ const HOURS_48 = 48 * 60 * 60 * 1000;
 /** Every property the definition promises, or a description of the first one that fails. */
 function violation(at: number, timeZone: string): string | null {
   const result = startOfNextLocalDay(new Date(at), timeZone).getTime();
-  const today = localDateOf(at, timeZone);
+  const today = oracleLocalDate(at, timeZone);
   if (!(result > at)) return "result is not after `at`";
-  if (!(localDateOf(result, timeZone) > today)) return "result is not on a later local date";
-  if (localDateOf(result - 1, timeZone) !== today)
+  if (!(oracleLocalDate(result, timeZone) > today)) return "result is not on a later local date";
+  if (oracleLocalDate(result - 1, timeZone) !== today)
     return "1 ms before the result is not `at`'s date";
   if (result - at > HOURS_48) return "result is more than 48 h after `at`";
   return null;
@@ -214,5 +214,49 @@ describe("resolveTimeZone", () => {
 
   it.each(["UTC", "America/New_York", "Asia/Kathmandu"])("keeps a valid zone: %s", (zone) => {
     expect(resolveTimeZone(zone)).toBe(zone);
+  });
+});
+
+describe("localDateOf (06 §8, QA5)", () => {
+  it.each([
+    ["2026-11-18T18:29:59.999Z", "Asia/Kolkata", "2026-11-18", "1 ms before IST midnight"],
+    ["2026-11-18T18:30:00.000Z", "Asia/Kolkata", "2026-11-19", "exactly IST midnight (Q-E2)"],
+    [
+      "2026-11-18T20:00:00.000Z",
+      "Asia/Kolkata",
+      "2026-11-19",
+      "01:30 IST, UTC still the day before (Q-E3)",
+    ],
+    ["2026-11-18T20:00:00.000Z", "UTC", "2026-11-18", "the same instant in UTC"],
+    ["2026-01-01T04:59:59.999Z", "America/New_York", "2025-12-31", "a year boundary"],
+    ["0999-03-04T12:00:00.000Z", "UTC", "0999-03-04", "a short year is padded"],
+  ])("%s in %s is %s (%s)", (at, zone, expected) => {
+    expect(localDateOf(new Date(at), zone)).toBe(expected);
+  });
+
+  it("agrees with startOfNextLocalDay: the cutoff is the first instant of the next date", () => {
+    const at = new Date("2026-11-18T15:30:00.000Z");
+    const cutoff = startOfNextLocalDay(at, "Asia/Kolkata");
+    expect(localDateOf(new Date(cutoff.getTime() - 1), "Asia/Kolkata")).toBe("2026-11-18");
+    expect(localDateOf(cutoff, "Asia/Kolkata")).toBe("2026-11-19");
+  });
+
+  it("matches the independent oracle across zones and many instants", () => {
+    const zones = [
+      "Asia/Kolkata",
+      "UTC",
+      "America/Santiago",
+      "Pacific/Kiritimati",
+      "Asia/Kathmandu",
+    ];
+    for (const zone of zones) {
+      for (let ms = Date.UTC(2026, 0, 1); ms < Date.UTC(2027, 0, 1); ms += 7_919_993) {
+        expect(localDateOf(new Date(ms), zone), `${zone} ${ms}`).toBe(oracleLocalDate(ms, zone));
+      }
+    }
+  });
+
+  it("refuses an invalid date", () => {
+    expect(() => localDateOf(new Date(Number.NaN), "UTC")).toThrow(RangeError);
   });
 });

@@ -1,10 +1,11 @@
 import { createDb, type Database } from "@repo/db";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
-import { createDefaultRegistry, DEFAULT_GRADING } from "../config";
+import { createDefaultRegistry, DEFAULT_GRADING, DEFAULT_QUEUE } from "../config";
 import { ReviewError, type ReviewErrorCode } from "../errors";
 import { signPresentationToken, verifyPresentationToken } from "../record/token";
 import { uuidv7 } from "../record/uuidv7";
 import { type SeededMcq, seedMcq, seedUser, seedUserWithMcq } from "../test/seed";
+import { startOfNextLocalDay } from "../time";
 import { answerReview } from "./answer";
 import { presentNext } from "./present";
 
@@ -25,7 +26,14 @@ const DAY = 24 * HOUR;
 const at = (ms: number) => new Date(T0.getTime() + ms);
 
 const present = (userId: string, now: Date) =>
-  presentNext(userId, { db, clock: { now: () => now }, tokenSecret: SECRET });
+  presentNext(userId, {
+    db,
+    clock: { now: () => now },
+    registry: createDefaultRegistry(),
+    grading: DEFAULT_GRADING,
+    queue: DEFAULT_QUEUE,
+    tokenSecret: SECRET,
+  });
 
 const answer = (userId: string, body: unknown, now: Date) =>
   answerReview(userId, body, {
@@ -55,7 +63,7 @@ async function errorCode(attempt: Promise<unknown>): Promise<ReviewErrorCode | "
 
 describe("GET /api/review/next (presentNext)", () => {
   it("has nothing for a user with no items", async () => {
-    expect(await present(`user_${uuidv7(T0)}`, T0)).toEqual({ state: "nothing_due" });
+    expect(await present(await seedUser(db), T0)).toEqual({ state: "nothing_due" });
   });
 
   it("presents a new MCQ with a token for that presentation, and never the answer", async () => {
@@ -303,16 +311,20 @@ async function seedCardState(
   });
 }
 
+/** Today's plan is answered and nothing else can be added. */
+const DONE = { state: "done_for_today", can_extend: false };
+
 describe("GET /api/review/next with the misconception override (R4.1, DD-10, DD-11)", () => {
   it("offers a 21:00 Sure + wrong again from exactly the next local midnight, as a Retest", async () => {
     const seeded = await seedUserWithMcq(db);
     await presentAndAnswer(seeded, seeded.wrong, NINE_PM_IST);
 
-    expect(await present(seeded.userId, plus(MIDNIGHT_IST, -1))).toEqual({ state: "nothing_due" });
+    // Still the day it was answered: today's plan is done, and the retest is tomorrow's.
+    expect(await present(seeded.userId, plus(MIDNIGHT_IST, -1))).toEqual(DONE);
     const retest = await presentOk(seeded.userId, MIDNIGHT_IST);
     expect(retest.item).toMatchObject({ category: "misconception", item: { id: seeded.itemId } });
-    // Done counts since UTC midnight (D-30); planned counts the override-due card.
-    expect(retest.progress).toEqual({ done: 1, planned: 2 });
+    // A new local day, a new session: its plan is the retest alone.
+    expect(retest.progress).toEqual({ done: 0, planned: 1 });
   });
 
   it("AC2: offers the S 100 card the next local day, though FSRS says 4 days", async () => {
@@ -325,11 +337,11 @@ describe("GET /api/review/next with the misconception override (R4.1, DD-10, DD-
       where: { userId_itemId: { userId: seeded.userId, itemId: seeded.itemId } },
     });
     expect(row.dueAt.getTime() - NINE_PM_IST.getTime()).toBeGreaterThan(3 * DAY);
-    expect(await present(seeded.userId, plus(MIDNIGHT_IST, -1))).toEqual({ state: "nothing_due" });
+    expect(await present(seeded.userId, plus(MIDNIGHT_IST, -1))).toEqual(DONE);
     expect((await presentOk(seeded.userId, MIDNIGHT_IST)).item.category).toBe("misconception");
   });
 
-  it("picks the card with the earlier effective due date, whichever column makes it due", async () => {
+  it("puts an open misconception ahead of a due card, whichever is due first (06 §4)", async () => {
     const now = plus(NINE_PM_IST, 10 * DAY);
     const farAway = plus(now, 30 * DAY);
 
@@ -348,9 +360,10 @@ describe("GET /api/review/next with the misconception override (R4.1, DD-10, DD-
     const d = await seedMcq(db, dueFirst);
     await seedCardState(dueFirst, c.itemId, farAway, plus(now, -1 * HOUR));
     await seedCardState(dueFirst, d.itemId, plus(now, -2 * HOUR), null);
+    // The ranker, not the due date, decides: w3 = 5 puts the misconception first.
     expect((await presentOk(dueFirst, now)).item).toMatchObject({
-      category: "review",
-      item: { id: d.itemId },
+      category: "misconception",
+      item: { id: c.itemId },
     });
     expect((await presentOk(dueFirst, now)).progress).toEqual({ done: 0, planned: 2 });
   });
@@ -363,13 +376,13 @@ describe("GET /api/review/next with the misconception override (R4.1, DD-10, DD-
     expect((await presentOk(userId, now)).item.category).toBe("misconception");
   });
 
-  it("breaks equal effective due dates by item id (E22)", async () => {
+  it("breaks equal priorities by stability, then by item id (E22, Q-E7)", async () => {
     const userId = await seedUser(db);
     const ids = [(await seedMcq(db, userId)).itemId, (await seedMcq(db, userId)).itemId].sort();
     const now = plus(NINE_PM_IST, 10 * DAY);
     const due = plus(now, -HOUR);
-    // The larger id is due by its override, the smaller by due_at, at the same instant.
-    await seedCardState(userId, ids[1] as string, plus(now, 30 * DAY), due);
+    // Identical cards on two notes: the same features, priority and stability.
+    await seedCardState(userId, ids[1] as string, due, null);
     await seedCardState(userId, ids[0] as string, due, null);
     expect((await presentOk(userId, now)).item.item.id).toBe(ids[0]);
   });
@@ -387,17 +400,19 @@ describe("GET /api/review/next with the misconception override (R4.1, DD-10, DD-
     expect(await present(outsider, now)).toEqual({ state: "nothing_due" });
   });
 
-  it("after the retest, does not offer the card again until its FSRS due date", async () => {
+  it("after the retest, does not offer the card again before the local day it is due", async () => {
     const seeded = await seedUserWithMcq(db);
     await presentAndAnswer(seeded, seeded.wrong, NINE_PM_IST);
     const { result } = await presentAndAnswer(seeded, seeded.right, MIDNIGHT_IST, "think_so");
 
     const dueAt = new Date(result.next_due_at);
-    expect(await present(seeded.userId, plus(MIDNIGHT_IST, HOUR))).toEqual({
-      state: "nothing_due",
-    });
-    expect(await present(seeded.userId, plus(dueAt, -1))).toEqual({ state: "nothing_due" });
-    expect((await presentOk(seeded.userId, dueAt)).item.category).toBe("review");
+    // IST has no DST: the local day of `dueAt` starts at the cutoff of the day before it.
+    const dueDay = startOfNextLocalDay(plus(dueAt, -DAY), "Asia/Kolkata");
+    expect(dueDay.getTime()).toBeGreaterThan(MIDNIGHT_IST.getTime());
+    expect(await present(seeded.userId, plus(MIDNIGHT_IST, HOUR))).toEqual(DONE);
+    expect(await present(seeded.userId, plus(dueDay, -1))).toEqual({ state: "nothing_due" });
+    // "Due today" is due before the next cutoff (QD-17), so it is offered from the day's start.
+    expect((await presentOk(seeded.userId, dueDay)).item.category).toBe("review");
   });
 });
 

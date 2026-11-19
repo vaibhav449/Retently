@@ -114,3 +114,130 @@ export async function insertReviewLog(db: Database, rows: LogFixture[]): Promise
 export async function setTimeZone(db: Database, userId: string, timezone: string): Promise<void> {
   await db.revisionSettings.create({ data: { userId, timezone } });
 }
+
+const DAY_MS = 86_400_000;
+
+/** Bulk inserts in batches, well inside Postgres' limit on bind parameters per statement. */
+function batches<T>(rows: readonly T[], size = 1_000): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size));
+  return out;
+}
+
+/**
+ * `count` MCQs owned by `userId`, spread round-robin over `sources` new notes (one chunk each),
+ * written with createMany: for bulk tests. Item ids in creation order.
+ */
+export async function seedMcqs(
+  db: Database,
+  userId: string,
+  count: number,
+  opts: { sources?: number } = {},
+): Promise<{ itemIds: string[]; sourceIds: string[] }> {
+  const sourceCount = Math.max(1, Math.min(count, opts.sources ?? count));
+  const sources = Array.from({ length: sourceCount }, (_, i) => ({
+    id: randomUUID(),
+    ownerId: userId,
+    kind: "note" as const,
+    title: `Note ${i + 1}`,
+  }));
+  const chunks = sources.map((source) => ({
+    id: randomUUID(),
+    sourceId: source.id,
+    blockIds: ["blk_1"],
+    text: "Mitochondria are the site of aerobic respiration.",
+    contentHash: randomUUID(),
+  }));
+  const items = Array.from({ length: count }, (_, i) => {
+    const right = randomUUID();
+    return {
+      id: randomUUID(),
+      sourceChunkId: (chunks[i % chunks.length] as { id: string }).id,
+      type: "mcq" as const,
+      prompt: `Question ${i + 1}?`,
+      answer: "Right",
+      options: [
+        { id: right, text: "Right" },
+        { id: randomUUID(), text: "Wrong" },
+      ],
+      answerOptionId: right,
+    };
+  });
+  for (const batch of batches(sources)) await db.source.createMany({ data: batch });
+  for (const batch of batches(chunks)) await db.chunk.createMany({ data: batch });
+  for (const batch of batches(items)) await db.item.createMany({ data: batch });
+  return { itemIds: items.map((item) => item.id), sourceIds: sources.map((source) => source.id) };
+}
+
+export interface CardFixture {
+  itemId: string;
+  dueAt: Date;
+  /** FSRS stability in days; last reviewed this long before dueAt. Default 10. */
+  stability?: number;
+  misconceptionUntil?: Date | null;
+}
+
+/** fsrs6-v1 card_state rows written directly (no review_log): for queue tests. */
+export async function seedCardStates(
+  db: Database,
+  userId: string,
+  rows: CardFixture[],
+): Promise<void> {
+  const data = rows.map((row) => {
+    const stability = row.stability ?? 10;
+    const lastReviewAt = new Date(row.dueAt.getTime() - stability * DAY_MS);
+    return {
+      userId,
+      itemId: row.itemId,
+      schedulerVersion: "fsrs6-v1",
+      state: {
+        kind: "fsrs",
+        difficulty: 5,
+        stability,
+        last_review_at: lastReviewAt.toISOString(),
+        due_at: row.dueAt.toISOString(),
+        reps: 3,
+        lapses: 0,
+        scheduled_days: Math.max(1, Math.round(stability)),
+      },
+      dueAt: row.dueAt,
+      misconceptionUntil: row.misconceptionUntil ?? null,
+      updatedAt: lastReviewAt,
+    };
+  });
+  for (const batch of batches(data)) await db.cardState.createMany({ data: batch });
+}
+
+/** Creates or changes `userId`'s revision_settings row. */
+export async function setRevisionSettings(
+  db: Database,
+  userId: string,
+  data: { timezone?: string; dailyBudgetSec?: number },
+): Promise<void> {
+  await db.revisionSettings.upsert({
+    where: { userId },
+    create: { userId, ...data },
+    update: data,
+  });
+}
+
+/** A review_pending row for `itemId`, as the short-answer path will write it. */
+export async function markPending(
+  db: Database,
+  userId: string,
+  itemId: string,
+  submittedAt: Date,
+): Promise<void> {
+  await db.reviewPending.create({
+    data: {
+      reviewId: randomUUID(),
+      userId,
+      itemId,
+      confidence: "sure",
+      response: { kind: "text", text: "pending" },
+      latencyMs: 4_000,
+      submittedAt,
+      status: "queued",
+    },
+  });
+}

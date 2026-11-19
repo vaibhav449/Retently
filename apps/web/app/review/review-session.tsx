@@ -7,8 +7,10 @@ import {
   type ReviewCategory,
   type ReviewItemView,
   type ReviewResult,
+  type ReviewSessionView,
   reviewAnswerResponseSchema,
   reviewNextResponseSchema,
+  reviewSessionViewSchema,
   type SessionProgress,
 } from "@repo/contracts";
 import { Check, X } from "lucide-react";
@@ -37,6 +39,16 @@ const CATEGORY_LABELS: Record<ReviewCategory, string> = {
   misconception: "Retest",
 };
 
+/**
+ * "Why am I seeing this?" by category (06-queue-ranker.md §10). The server ranks each entry by its
+ * features, but the contract does not carry the reason yet (QD-13), so the category speaks for it.
+ */
+const WHY: Record<ReviewCategory, string> = {
+  new: "A new question from your notes.",
+  review: "Due for review today; your memory of this is fading.",
+  misconception: "You were sure about this and got it wrong — let's check it again.",
+};
+
 /** Answers the server refused, by status (05-review-pipeline.md §8.2). Retrying would not help. */
 const REFUSALS: Record<number, string> = {
   400: "This question can no longer be answered.",
@@ -54,8 +66,15 @@ const shortDate = new Intl.DateTimeFormat(undefined, {
 
 type SessionState =
   | { name: "loading" }
-  | { name: "question"; view: ReviewItemView; progress: SessionProgress }
-  | { name: "nothing_due" | "done_for_today" }
+  | {
+      name: "question";
+      view: ReviewItemView;
+      progress: SessionProgress;
+      /** Today's plan, for the time left; null if it could not be loaded. */
+      plan: ReviewSessionView | null;
+    }
+  | { name: "nothing_due" }
+  | { name: "done_for_today"; canExtend: boolean }
   | { name: "failed" };
 
 /** GET /api/review/next, as the state the session moves to. */
@@ -65,8 +84,10 @@ async function loadNext(signal?: AbortSignal): Promise<SessionState | "signed_ou
     if (response.status === 401) return "signed_out";
     if (!response.ok) throw new Error(`GET /api/review/next answered ${response.status}`);
     const next = reviewNextResponseSchema.parse(await response.json());
-    if (next.state !== "ok") return { name: next.state };
-    return { name: "question", view: next.item, progress: next.progress };
+    if (next.state === "nothing_due") return { name: "nothing_due" };
+    if (next.state === "done_for_today")
+      return { name: "done_for_today", canExtend: next.can_extend };
+    return { name: "question", view: next.item, progress: next.progress, plan: null };
   } catch (error) {
     if (!signal?.aborted) console.error(error);
     return { name: "failed" };
@@ -74,9 +95,37 @@ async function loadNext(signal?: AbortSignal): Promise<SessionState | "signed_ou
 }
 
 /**
- * One question at a time from GET /api/review/next, until nothing is left. Every question, the
- * first included, is fetched here after hydration instead of being rendered on the server, so
- * latency is measured the same way for all of them.
+ * POST /api/review/session (or /session/extend): today's plan with fresh progress. Only the time
+ * left comes from it, so a failure just hides that.
+ */
+async function loadPlan(
+  path: "/api/review/session" | "/api/review/session/extend",
+  signal?: AbortSignal,
+): Promise<ReviewSessionView | null> {
+  try {
+    const response = await fetch(path, { method: "POST", signal });
+    if (!response.ok) throw new Error(`POST ${path} answered ${response.status}`);
+    return reviewSessionViewSchema.parse(await response.json());
+  } catch (error) {
+    if (!signal?.aborted) console.error(error);
+    return null;
+  }
+}
+
+/** The next question and today's plan, fetched together. */
+async function loadAll(signal?: AbortSignal): Promise<SessionState | "signed_out"> {
+  const [next, plan] = await Promise.all([
+    loadNext(signal),
+    loadPlan("/api/review/session", signal),
+  ]);
+  return typeof next !== "string" && next.name === "question" ? { ...next, plan } : next;
+}
+
+/**
+ * One question at a time from today's plan (GET /api/review/next), until it is done; then "Study
+ * more" extends the plan. Every question, the first included, is fetched here after hydration
+ * instead of being rendered on the server, so latency is measured the same way for all of them
+ * (D-35).
  */
 export function ReviewSession() {
   const router = useRouter();
@@ -92,7 +141,7 @@ export function ReviewSession() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void loadNext(controller.signal).then((next) => {
+    void loadAll(controller.signal).then((next) => {
       if (!controller.signal.aborted) show(next);
     });
     return () => controller.abort();
@@ -100,7 +149,17 @@ export function ReviewSession() {
 
   function showNext() {
     setSession({ name: "loading" });
-    void loadNext().then(show);
+    void loadAll().then(show);
+  }
+
+  async function studyMore() {
+    setSession({ name: "loading" });
+    const extended = await loadPlan("/api/review/session/extend");
+    if (extended === null) {
+      setSession({ name: "failed" });
+      return;
+    }
+    show(await loadAll());
   }
 
   switch (session.name) {
@@ -113,6 +172,7 @@ export function ReviewSession() {
           key={session.view.presentation_token}
           view={session.view}
           progress={session.progress}
+          remainingSec={session.plan?.remaining_sec ?? null}
           onNext={showNext}
           onSignedOut={() => router.replace("/login")}
         />
@@ -124,8 +184,16 @@ export function ReviewSession() {
         </Notice>
       );
     case "done_for_today":
-      // "Study more" (can_extend) waits for the extend endpoint, which comes with daily sessions.
-      return <Notice title="Done for today">Come back tomorrow for your next reviews.</Notice>;
+      return session.canExtend ? (
+        <Notice
+          title="Done for today"
+          action={<Button onClick={() => void studyMore()}>Study more</Button>}
+        >
+          You finished today&apos;s plan. There is more you could review.
+        </Notice>
+      ) : (
+        <Notice title="Done for today">Come back tomorrow for your next reviews.</Notice>
+      );
     case "failed":
       return (
         <div className="flex flex-col items-start gap-3">
@@ -156,6 +224,8 @@ type AnswerState =
 interface QuestionCardProps {
   view: ReviewItemView;
   progress: SessionProgress;
+  /** Planned seconds left in today's plan, this question included; null when unknown. */
+  remainingSec: number | null;
   onNext: () => void;
   onSignedOut: () => void;
 }
@@ -164,7 +234,7 @@ interface QuestionCardProps {
  * D-14: the stem and the options show together, the options stay disabled until a confidence is
  * picked, and latency runs from first render to submit.
  */
-function QuestionCard({ view, progress, onNext, onSignedOut }: QuestionCardProps) {
+function QuestionCard({ view, progress, remainingSec, onNext, onSignedOut }: QuestionCardProps) {
   const [confidence, setConfidence] = useState<Confidence | null>(null);
   const [answer, setAnswer] = useState<AnswerState>({ name: "unanswered" });
   const shownAt = useRef(0);
@@ -237,7 +307,11 @@ function QuestionCard({ view, progress, onNext, onSignedOut }: QuestionCardProps
       <CardHeader>
         <CardDescription>
           {CATEGORY_LABELS[view.category]} · {progress.done} of {progress.planned} done today
+          {remainingSec !== null && remainingSec > 0 && (
+            <> · about {Math.max(1, Math.round(remainingSec / 60))} min left</>
+          )}
         </CardDescription>
+        <p className="text-muted-foreground text-xs">{WHY[view.category]}</p>
         <CardTitle className="text-lg">
           <h2>{view.item.prompt}</h2>
         </CardTitle>
@@ -416,13 +490,22 @@ function CitationQuote({ citation }: { citation: Citation }) {
   );
 }
 
-function Notice({ title, children }: { title: string; children: ReactNode }) {
+function Notice({
+  title,
+  children,
+  action,
+}: {
+  title: string;
+  children: ReactNode;
+  action?: ReactNode;
+}) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{children}</CardDescription>
       </CardHeader>
+      {action && <CardFooter>{action}</CardFooter>}
     </Card>
   );
 }
