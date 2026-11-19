@@ -46,7 +46,14 @@ export function getDocument(db: Database, userId: string, documentId: string) {
   if (!where) return Promise.resolve(null);
   return db.document.findFirst({
     where,
-    select: { id: true, title: true, contentJson: true, contentMd: true, version: true },
+    select: {
+      id: true,
+      title: true,
+      contentJson: true,
+      contentMd: true,
+      version: true,
+      source: { select: { id: true } },
+    },
   });
 }
 
@@ -63,6 +70,24 @@ export async function getDocumentSourceId(
     select: { source: { select: { id: true } } },
   });
   return document?.source?.id ?? null;
+}
+
+/**
+ * What a "Generate questions" job needs: the note's source id and current version. Null when the
+ * user does not own the note, or it has no `sources` row.
+ */
+export async function getNoteForGeneration(
+  db: Database,
+  userId: string,
+  documentId: string,
+): Promise<{ sourceId: string; version: number } | null> {
+  const where = ownedBy(userId, documentId);
+  if (!where) return null;
+  const document = await db.document.findFirst({
+    where,
+    select: { version: true, source: { select: { id: true } } },
+  });
+  return document?.source ? { sourceId: document.source.id, version: document.version } : null;
 }
 
 /** Renames the note and its source together. False when the user does not own it. */
