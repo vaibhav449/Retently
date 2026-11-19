@@ -4,6 +4,7 @@
  * Import from "@repo/contracts/fixtures" in tests and stubs, never in production code.
  */
 import type { Citation } from "../citation";
+import type { GenerateQuestionsQueuedResponse } from "../document";
 import type { ClozeItem, McqItem, ShortAnswerItem } from "../item";
 import type { IngestCompletedEvent, IngestFailedEvent, IngestRequestedJob } from "../jobs";
 import type { RealtimeTokenResponse } from "../realtime";
@@ -212,16 +213,36 @@ export const wsEnvelopeFixture: WsEnvelope = {
   request_id: "req_01",
 };
 
+/** The job a "Generate questions" click publishes: the first run of that click. */
 export const ingestRequestedJobFixture: IngestRequestedJob = {
   type: "ingest.requested",
   v: 1,
   source_id: NOTE_SOURCE_ID,
   version: 7,
+  run: 1,
+  requested_at: "2026-11-18T09:00:00.000Z",
 };
 
+/** The worker's follow-up when passages were still pending after the first run. */
+export const ingestFollowUpJobFixture: IngestRequestedJob = {
+  ...ingestRequestedJobFixture,
+  run: 2,
+};
+
+/** The one final event of a click: 32 of the note's 45 passages have a question by now. */
 export const ingestCompletedEventFixture: IngestCompletedEvent = {
   type: "ingest.completed",
-  payload: { source_id: NOTE_SOURCE_ID, items_created: 12 },
+  payload: {
+    source_id: NOTE_SOURCE_ID,
+    items_created: 12,
+    chunks: 45,
+    chunks_pending: 13,
+    budget_exhausted: true,
+  },
+};
+
+export const generateQuestionsQueuedFixture: GenerateQuestionsQueuedResponse = {
+  status: "queued",
 };
 
 export const ingestFailedEventFixture: IngestFailedEvent = {
