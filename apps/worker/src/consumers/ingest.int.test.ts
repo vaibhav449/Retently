@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { type IngestRequestedJob, ingestRequestedJobSchema } from "@repo/contracts";
+import type { IngestResult } from "@repo/ingest";
 import {
   assertTopology,
   EXCHANGES,
@@ -11,12 +12,7 @@ import {
 } from "@repo/messaging";
 import { type Channel, type ChannelModel, type ConfirmChannel, connect } from "amqplib";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from "vitest";
-import {
-  INGEST_FAILED_MESSAGE,
-  type IngestDeps,
-  type IngestResult,
-  ingestHandlers,
-} from "./ingest";
+import { INGEST_FAILED_MESSAGE, type IngestDeps, ingestHandlers } from "./ingest";
 
 const RETRY_DELAY_MS = 200;
 const OWNER = "user_owner";
@@ -59,6 +55,18 @@ const newJob = (): IngestRequestedJob => ({
   version: 1,
 });
 
+/** The event a fake run on a one-chunk source sends. */
+const completed = (job: IngestRequestedJob, itemsCreated: number): UserEvent => ({
+  type: "ingest.completed",
+  payload: {
+    source_id: job.source_id,
+    items_created: itemsCreated,
+    chunks: 1,
+    chunks_pending: 0,
+    budget_exhausted: false,
+  },
+});
+
 const ready = async (queue: string) => (await publisher.checkQueue(queue)).messageCount;
 
 /** Every event published for OWNER, as realtime would receive it. */
@@ -94,6 +102,7 @@ function fakeIngest(failures = 0) {
       itemsCreated: fresh ? 3 : 0,
       itemsSkipped: fresh ? 0 : 3,
       budgetExhausted: false,
+      chunksPending: 0,
     });
   };
   return { ingestSource, calls, created };
@@ -109,6 +118,9 @@ async function startWorker(
   const handlers = ingestHandlers({
     ownerOf: () => Promise.resolve(OWNER),
     ingestSource,
+    // These jobs carry no requested_at, so the event reports the run's own count.
+    itemsCreatedSince: () => Promise.reject(new Error("not used without requested_at")),
+    publishJob: (followUp) => publishJob(ch, followUp),
     publishEvent: (userId, event) => publishEvent(ch, userId, event),
   });
   const consumer = await startConsumer(ch, {
@@ -132,9 +144,7 @@ describe("ingest.requested on RabbitMQ", () => {
     await publishJob(publisher, job);
     await eventually(() => events.length === 1);
 
-    expect(events).toEqual([
-      { type: "ingest.completed", payload: { source_id: job.source_id, items_created: 3 } },
-    ]);
+    expect(events).toEqual([completed(job, 3)]);
     expect(ingest.calls).toEqual([job.source_id]);
     expect(await ready(QUEUES.ingest)).toBe(0);
     expect(await ready(QUEUES.parked)).toBe(0);
@@ -221,9 +231,7 @@ describe("ingest.requested on RabbitMQ", () => {
     expect(ingest.calls).toEqual([job.source_id, job.source_id]);
     expect(ingest.created).toEqual(new Set([job.source_id]));
     // Worker B found everything already created, so it reports no new questions.
-    expect(events).toEqual([
-      { type: "ingest.completed", payload: { source_id: job.source_id, items_created: 0 } },
-    ]);
+    expect(events).toEqual([completed(job, 0)]);
     expect(await ready(QUEUES.ingest)).toBe(0);
   });
 

@@ -29,3 +29,22 @@ export function getServerEnv(): ServerEnv {
   cached = result.data;
   return cached;
 }
+
+const jobsEnvSchema = z.object({
+  /** The broker the "Generate questions" route publishes to, e.g. amqp://app:app@127.0.0.1:5672 */
+  RABBITMQ_URL: z.url({ protocol: /^amqps?$/ }),
+});
+
+export type JobsEnv = z.infer<typeof jobsEnvSchema>;
+
+/**
+ * Kept apart from getServerEnv() so that a missing broker URL turns off question generation (the
+ * route answers 503), not the whole app. Production can't forget it: compose requires it.
+ */
+export function getJobsEnv(): JobsEnv {
+  const result = jobsEnvSchema.safeParse(process.env);
+  if (!result.success) {
+    throw new Error(`Invalid jobs environment:\n${z.prettifyError(result.error)}`);
+  }
+  return result.data;
+}

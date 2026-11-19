@@ -105,18 +105,18 @@ Planned: add CODEOWNERS mirroring this table; the repository does not include th
 
 **Rule:** whoever builds a shared piece ships its Zod shape and a fixture in `packages/contracts` _first_. The other person builds against the fixture until the real thing lands.
 
-| Shared piece                                                                            | Built by                        | Used by                                               | Until it's real                                               |
-| --------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------- |
-| `items` rows (MCQ, then cloze and short answer)                                         | Anurag                          | Vaibhav: review and duels                             | Fixture items                                                 |
-| `ingestSource(sourceId)` → added, changed and removed chunks; `generateItems(chunkIds)` | Anurag                          | Vaibhav: worker consumers                             | Called directly from the "Generate questions" route (Phase 1) |
-| `document.changed` event                                                                | Anurag: editor, then Hocuspocus | Vaibhav: publishes the ingest job                     | Direct call (Phase 1)                                         |
-| `/events` socket + a `subscribe(type, handler)` client helper                           | Vaibhav                         | Anurag: "PDF ready" notification                      | Upload screen shows "processing"                              |
-| Realtime token: issue + `verifyRealtimeToken()`                                         | Anurag                          | Vaibhav for `/events`; Anurag for `/collab`           | —                                                             |
-| `canAccessSource(userId, sourceId)` in `packages/db`                                    | Vaibhav: owner-only (Phase 1)   | Anurag adds sharing (Phase 2); both use it everywhere | —                                                             |
-| `<Citation>` component + `Citation` shape                                               | Anurag                          | Vaibhav: review reveal                                | Plain snippet text                                            |
-| `gradeShortAnswer(item, answer)`                                                        | Anurag                          | Vaibhav: `recordReview()` and the worker              | Short-answer items stay hidden                                |
-| Analytics endpoints                                                                     | Vaibhav                         | Anurag: dashboard panels                              | Fixtures, then synthetic-student data                         |
-| Misconception list                                                                      | Vaibhav                         | Anurag: explanation flow                              | Fixture                                                       |
+| Shared piece                                                                            | Built by                        | Used by                                               | Until it's real                                                                                                                                                   |
+| --------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `items` rows (MCQ, then cloze and short answer)                                         | Anurag                          | Vaibhav: review and duels                             | Fixture items                                                                                                                                                     |
+| `ingestSource(sourceId)` → added, changed and removed chunks; `generateItems(chunkIds)` | Anurag                          | Vaibhav: worker consumers                             | Real for `ingestSource()`: the worker runs it on `ingest.requested`, which the "Generate questions" click publishes (Phase 2). `generateItems()` is still to come |
+| `document.changed` event                                                                | Anurag: editor, then Hocuspocus | Vaibhav: publishes the ingest job                     | Direct call (Phase 1)                                                                                                                                             |
+| `/events` socket + a `subscribe(type, handler)` client helper                           | Vaibhav                         | Anurag: "PDF ready" notification                      | Upload screen shows "processing"                                                                                                                                  |
+| Realtime token: issue + `verifyRealtimeToken()`                                         | Anurag                          | Vaibhav for `/events`; Anurag for `/collab`           | —                                                                                                                                                                 |
+| `canAccessSource(userId, sourceId)` in `packages/db`                                    | Vaibhav: owner-only (Phase 1)   | Anurag adds sharing (Phase 2); both use it everywhere | —                                                                                                                                                                 |
+| `<Citation>` component + `Citation` shape                                               | Anurag                          | Vaibhav: review reveal                                | Plain snippet text                                                                                                                                                |
+| `gradeShortAnswer(item, answer)`                                                        | Anurag                          | Vaibhav: `recordReview()` and the worker              | Short-answer items stay hidden                                                                                                                                    |
+| Analytics endpoints                                                                     | Vaibhav                         | Anurag: dashboard panels                              | Fixtures, then synthetic-student data                                                                                                                             |
+| Misconception list                                                                      | Vaibhav                         | Anurag: explanation flow                              | Fixture                                                                                                                                                           |
 
 ---
 
@@ -215,14 +215,14 @@ Planned: add CODEOWNERS mirroring this table; the repository does not include th
 
 **Vaibhav**
 
-- [ ] `apps/worker`: connects to RabbitMQ with a prefetch limit. A `jobs` exchange carries `ingest.requested` and `items.generate`; an `events` exchange carries results.
-- [ ] Consumers call Anurag's `ingestSource()` and `generateItems()`. They ack on success, retry with backoff, and dead-letter after repeated failures.
-- [ ] Publish `ingest.requested` from the upload route and on every `document.changed`
+- [x] `apps/worker`: connects to RabbitMQ with a prefetch limit. A `jobs` exchange carries `ingest.requested` and `items.generate`; an `events` exchange carries results. _`items.generate` is not bound yet: it waits for `generateItems()`._
+- [x] Consumers call Anurag's `ingestSource()` and `generateItems()`. They ack on success, retry with backoff, and dead-letter after repeated failures. _`ingestSource()` is wired, with follow-up runs for notes over 20 passages (`apps/worker/README.md`); `generateItems()` is still to come._
+- [ ] Publish `ingest.requested` from the upload route and on every `document.changed`. _Done for the "Generate questions" click (202, results over `/events`); the upload route and `document.changed` are still open._
 - [ ] Item reconciliation when a source changes:
   - Items whose chunk disappeared or changed get `retired_at` if they have review history, and are deleted if they don't.
   - Only new chunks get `items.generate` jobs.
   - A redelivered message never creates duplicates.
-- [ ] The worker publishes `ingest.completed` / `ingest.failed`, and `realtime` forwards them to the user's socket. Ship the `subscribe(type, handler)` client helper.
+- [x] The worker publishes `ingest.completed` / `ingest.failed`, and `realtime` forwards them to the user's socket. Ship the `subscribe(type, handler)` client helper. _The note page is its first user._
 - [ ] Finish FSRS and SM-2 with property tests, then swap FSRS in for the placeholder inside `recordReview()`
 
 **Exit:**

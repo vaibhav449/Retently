@@ -60,7 +60,21 @@ export type SaveDocumentContentResponse = z.infer<typeof saveDocumentContentResp
 export type DocumentVersionConflict = z.infer<typeof documentVersionConflictSchema>;
 export type UpdateDocumentRequest = z.infer<typeof updateDocumentRequestSchema>;
 
-/** What one "Generate questions" click did: the ingest run's result (seam 2), as sent to the note page. */
+/**
+ * 202 from POST /api/documents/:id/questions: the job is on the queue. The result arrives later
+ * on the /events socket as `ingest.completed` (or `ingest.failed`).
+ */
+export const generateQuestionsQueuedResponseSchema = z.strictObject({
+  status: z.literal("queued"),
+});
+
+export type GenerateQuestionsQueuedResponse = z.infer<typeof generateQuestionsQueuedResponseSchema>;
+
+/**
+ * What one "Generate questions" click did when the route ran ingestion itself (Phase 1).
+ * @deprecated Unused since background generation: the counts come in `ingest.completed`.
+ * Delete in the follow-up PR.
+ */
 export const generateQuestionsResponseSchema = z.strictObject({
   /** Passages in the note long enough to ask about. */
   chunks: z.number().int().nonnegative(),
@@ -73,4 +87,5 @@ export const generateQuestionsResponseSchema = z.strictObject({
   chunks_pending: z.number().int().nonnegative(),
 });
 
+/** @deprecated See {@link generateQuestionsResponseSchema}. */
 export type GenerateQuestionsResponse = z.infer<typeof generateQuestionsResponseSchema>;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { z } from "zod";
 import { citationSchema } from "./citation";
+import { generateQuestionsQueuedResponseSchema } from "./document";
 import * as fixtures from "./fixtures";
 import { itemSchema, mcqItemSchema } from "./item";
 import {
@@ -46,8 +47,14 @@ const cases: [string, z.ZodType, unknown][] = [
   ["reviewSessionViewFixture", reviewSessionViewSchema, fixtures.reviewSessionViewFixture],
   ["wsEnvelopeFixture", wsEnvelopeSchema, fixtures.wsEnvelopeFixture],
   ["ingestRequestedJobFixture", ingestRequestedJobSchema, fixtures.ingestRequestedJobFixture],
+  ["ingestFollowUpJobFixture", ingestRequestedJobSchema, fixtures.ingestFollowUpJobFixture],
   ["ingestCompletedEventFixture", ingestCompletedEventSchema, fixtures.ingestCompletedEventFixture],
   ["ingestFailedEventFixture", ingestFailedEventSchema, fixtures.ingestFailedEventFixture],
+  [
+    "generateQuestionsQueuedFixture",
+    generateQuestionsQueuedResponseSchema,
+    fixtures.generateQuestionsQueuedFixture,
+  ],
   [
     "realtimeTokenResponseFixture",
     realtimeTokenResponseSchema,

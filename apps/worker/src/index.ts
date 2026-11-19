@@ -1,18 +1,19 @@
 import { createServer } from "node:http";
-import { type HealthResponse, ingestRequestedJobSchema } from "@repo/contracts";
+import type { HealthResponse } from "@repo/contracts";
 import { createDb } from "@repo/db";
-import {
-  assertTopology,
-  connectWithRetry,
-  publishEvent,
-  QUEUES,
-  startConsumer,
-} from "@repo/messaging";
-import { ingestHandlers } from "./consumers/ingest";
-import { loadEnv } from "./env";
-import { ingestSourceStub } from "./ingest-stub";
+import { defaultModel } from "@repo/llm";
+import { assertTopology, connectWithRetry, QUEUES } from "@repo/messaging";
+import { startIngestWorker } from "./app";
+import { type Env, loadEnv } from "./env";
 
-const env = loadEnv();
+// Checked before anything connects: without a model key every job would only be parked.
+let env: Env;
+try {
+  env = loadEnv();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+}
 const startedAt = Date.now();
 let shuttingDown = false;
 
@@ -28,7 +29,8 @@ connection.on("close", () => {
   process.exit(1);
 });
 
-// A confirm channel, so a retry copy or a parked job counts as sent only once RabbitMQ has it.
+// A confirm channel, so a follow-up, a retry copy or a parked job counts as sent only once
+// RabbitMQ has it.
 const channel = await connection.createConfirmChannel();
 channel.on("close", () => {
   if (shuttingDown) return;
@@ -37,25 +39,14 @@ channel.on("close", () => {
 });
 await assertTopology(channel);
 
-const ingest = ingestHandlers({
-  ownerOf: async (sourceId) => {
-    const source = await db.source.findUnique({
-      where: { id: sourceId },
-      select: { ownerId: true },
-    });
-    return source?.ownerId ?? null;
+const consumer = await startIngestWorker({
+  channel,
+  db,
+  llm: {
+    model: defaultModel,
+    dailyBudgetUsd: env.LLM_DAILY_BUDGET_USD,
+    clock: { now: () => new Date() },
   },
-  ingestSource: ingestSourceStub,
-  publishEvent: (userId, event) => publishEvent(channel, userId, event),
-});
-const consumer = await startConsumer(channel, {
-  queue: QUEUES.ingest,
-  schema: ingestRequestedJobSchema,
-  // An ingest job is mostly LLM calls: a few at a time is plenty, and fair across workers.
-  prefetch: 4,
-  maxAttempts: 3,
-  handle: ingest.handle,
-  onGaveUp: ingest.onGaveUp,
 });
 console.log(`worker consuming ${QUEUES.ingest}`);
 

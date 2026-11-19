@@ -34,13 +34,20 @@ const STATUS_TEXT: Record<SaveStatus, string> = {
 
 interface NoteEditorProps {
   documentId: string;
+  /** The note's `sources` row; null for a note created outside the documents API. */
+  sourceId: string | null;
   /** TipTap JSON from `documents.content_json`; null for a note that was never saved. */
   initialContent: JSONContent | null;
   initialVersion: number;
 }
 
 /** The note's TipTap editor. Every change is autosaved as TipTap JSON and Markdown. */
-export function NoteEditor({ documentId, initialContent, initialVersion }: NoteEditorProps) {
+export function NoteEditor({
+  documentId,
+  sourceId,
+  initialContent,
+  initialVersion,
+}: NoteEditorProps) {
   const autosave = useAutosave(documentId, initialVersion);
   const { schedule, flush } = autosave;
 
@@ -107,7 +114,12 @@ export function NoteEditor({ documentId, initialContent, initialVersion }: NoteE
         </div>
       )}
       <div className="pt-4">
-        <GenerateQuestions documentId={documentId} flush={flush} disabled={!editor || locked} />
+        <GenerateQuestions
+          documentId={documentId}
+          sourceId={sourceId}
+          flush={flush}
+          disabled={!editor || locked}
+        />
       </div>
     </div>
   );

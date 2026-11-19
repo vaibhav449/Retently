@@ -39,6 +39,7 @@ async function Note({ params }: Pick<PageProps<"/notes/[id]">, "params">) {
       <NoteHeader id={note.id} title={note.title} />
       <NoteEditor
         documentId={note.id}
+        sourceId={note.source?.id ?? null}
         // Written only by this editor, so it is TipTap JSON (or null before the first save).
         initialContent={note.contentJson as JSONContent | null}
         initialVersion={note.version}
