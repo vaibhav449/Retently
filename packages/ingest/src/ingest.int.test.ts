@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createDb, type Database } from "@repo/db";
-import { presentNext } from "@repo/revision";
+import { createDefaultRegistry, DEFAULT_GRADING, DEFAULT_QUEUE, presentNext } from "@repo/revision";
 import { MockLanguageModelV4 } from "ai/test";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { type IngestDeps, IngestError, ingestSource } from "./ingest";
@@ -125,7 +125,14 @@ describe("ingestSource", () => {
     }
     expect(await db.llmUsage.count({ where: { userId, feature: "item_generation" } })).toBe(3);
 
-    const next = await presentNext(userId, { db, clock, tokenSecret: "x".repeat(32) });
+    const next = await presentNext(userId, {
+      db,
+      clock,
+      registry: createDefaultRegistry(),
+      grading: DEFAULT_GRADING,
+      queue: DEFAULT_QUEUE,
+      tokenSecret: "x".repeat(32),
+    });
     expect(next.state).toBe("ok");
     if (next.state === "ok") {
       expect(items.map((item) => item.prompt)).toContain(next.item.item.prompt);

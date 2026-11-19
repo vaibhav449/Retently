@@ -1,3 +1,4 @@
+import type { ItemType } from "@repo/contracts";
 import { createRegistry, fsrs6V1, placeholderV0, type SchedulerRegistry } from "@repo/scheduler";
 import type { GradingConfig } from "./grading/mapping";
 import type { Clock } from "./record/recordReview";
@@ -29,6 +30,77 @@ export const LATENCY_MEDIAN_CACHE_MAX_ENTRIES = 10_000;
  * column default of revision_settings.timezone (D-22).
  */
 export const DEFAULT_TIME_ZONE = "Asia/Kolkata";
+
+/** The daily queue's constants (06-queue-ranker.md, 10-implementation-plan.md §2). */
+export interface QueueConfig {
+  /** Stored in every session's meta, with a hash of this whole object. */
+  rankerVersion: string;
+  /** w1..w5 of priority = Σ wᵢ · featureᵢ (06 §4). */
+  weights: {
+    overdue: number;
+    exam: number;
+    misconception: number;
+    weakness: number;
+    coverage: number;
+  };
+  /** overdue_pressure never exceeds this (06 §3.1, D-16). */
+  overdueCap: number;
+  /** overdue_pressure divides by at least this many days of stability (06 §3.1). */
+  stabilityFloorDays: number;
+  /** New items take at most this share of N, unless the cap is lifted (06 §6, D-09). */
+  newShare: number;
+  /** Slots reserved for open misconceptions, as a share of N (06 §6, D-09). */
+  misconceptionReserveShare: number;
+  /** A user with fewer solo reviews than this gets the new-item cap lifted to N (cold start). */
+  coldStartReviews: number;
+  /** At most this many short answers per selection (06 §6). */
+  shortAnswerSessionCap: number;
+  /** The budget of a user without revision_settings (06 §5). */
+  defaultBudgetSec: number;
+  /** The CHECK on revision_settings.daily_budget_sec; a stored value is clamped to it too. */
+  budgetBoundsSec: readonly [number, number];
+  /** Added to every item's cost: reading the reveal (06 §5). */
+  feedbackSec: number;
+  /** An item type's cost without a latency median, before the feedback time (06 §5). */
+  costPriorSec: Readonly<Record<ItemType, number>>;
+  /** The median or prior is clamped to this range before the feedback time is added. */
+  costClampSec: readonly [number, number];
+  /** Trim while the plan costs more than budget × (1 + trimSlack) (06 §5). */
+  trimSlack: number;
+  /** The new pool holds at most this many items (06 §2). */
+  newPoolLimit: number;
+  /** The average cost is taken over this many of the user's newest solo reviews (06 §5). */
+  costWindow: number;
+  /** The average cost of a user with no solo reviews (06 §5). */
+  costPriorAvgSec: number;
+  /** The item types the review screen can present; nothing else enters a plan. MCQ only for now. */
+  servedTypes: readonly ItemType[];
+  /** The exam term's constants (07 §4.1). Used once exam mode lands; exam_term is 0 until then. */
+  exam: { tauDays: number; scopeShare: number };
+}
+
+/** The queue in production (06-queue-ranker.md; 10-implementation-plan.md §2). Tests inject their own. */
+export const DEFAULT_QUEUE: QueueConfig = {
+  rankerVersion: "ranker-v1",
+  weights: { overdue: 1.0, exam: 2.0, misconception: 5.0, weakness: 1.0, coverage: 0.5 },
+  overdueCap: 10,
+  stabilityFloorDays: 0.1,
+  newShare: 0.25,
+  misconceptionReserveShare: 0.15,
+  coldStartReviews: 20,
+  shortAnswerSessionCap: 4,
+  defaultBudgetSec: 900,
+  budgetBoundsSec: [300, 3600],
+  feedbackSec: 10,
+  costPriorSec: { mcq: 20, cloze: 20, short_answer: 60 },
+  costClampSec: [5, 120],
+  trimSlack: 0.15,
+  newPoolLimit: 200,
+  costWindow: 100,
+  costPriorAvgSec: 30,
+  servedTypes: ["mcq"],
+  exam: { tauDays: 10, scopeShare: 0.5 },
+};
 
 /**
  * New cards are scheduled with fsrs6-v1. placeholder-v0 stays registered because a stored state is

@@ -1,20 +1,21 @@
 import { presentNext } from "@repo/revision";
-import { getDb } from "@/lib/db";
 import { getServerEnv } from "@/lib/env";
-import { reviewClock, reviewHeaders } from "@/lib/review-engine";
+import { reviewHeaders, sessionDeps } from "@/lib/review-engine";
 import { getSession } from "@/lib/session";
 
-/** The next question to review, with a presentation token to send back with the answer. */
+/**
+ * The next question of today's plan, with a presentation token to send back with the answer. The
+ * first call of the local day builds the plan (06-queue-ranker.md §8).
+ */
 export async function GET(request: Request) {
   const session = await getSession();
   if (!session) {
     return Response.json({ error: "Sign in to review" }, { status: 401 });
   }
 
-  const { clock, shifted } = reviewClock(request);
+  const { deps, shifted } = sessionDeps(request);
   const body = await presentNext(session.user.id, {
-    db: getDb(),
-    clock,
+    ...deps,
     tokenSecret: getServerEnv().REVIEW_TOKEN_SECRET,
   });
   return Response.json(body, { headers: reviewHeaders(shifted) });

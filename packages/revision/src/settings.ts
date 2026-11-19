@@ -1,4 +1,6 @@
 import type { Database } from "@repo/db";
+import type { QueueConfig } from "./config";
+import { clamp } from "./queue/features";
 import { resolveTimeZone } from "./time";
 
 /**
@@ -15,4 +17,25 @@ export async function userTimeZone(
     select: { timezone: true },
   });
   return resolveTimeZone(row?.timezone);
+}
+
+/**
+ * The user's zone and daily budget (06-queue-ranker.md §5, Q3.1): from revision_settings, else
+ * the defaults; the budget is clamped to cfg.budgetBoundsSec (the column's CHECK). One
+ * primary-key read; never creates a row.
+ */
+export async function userRevisionSettings(
+  db: Pick<Database, "revisionSettings">,
+  userId: string,
+  cfg: QueueConfig,
+): Promise<{ timeZone: string; budgetSec: number }> {
+  const row = await db.revisionSettings.findUnique({
+    where: { userId },
+    select: { timezone: true, dailyBudgetSec: true },
+  });
+  const [low, high] = cfg.budgetBoundsSec;
+  return {
+    timeZone: resolveTimeZone(row?.timezone),
+    budgetSec: clamp(row?.dailyBudgetSec ?? cfg.defaultBudgetSec, low, high),
+  };
 }
