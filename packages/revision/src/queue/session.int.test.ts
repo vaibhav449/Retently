@@ -570,3 +570,64 @@ describe("extendSession (06 §8, Q6.4, QD-12)", () => {
     expect(await session(userId, plus(NOW, HOUR))).toEqual(before);
   });
 });
+
+describe("a busy connection pool (P2028)", () => {
+  /** More 3-second sleeps than the pg pool has connections (10 by default). */
+  const SLEEPS = 12;
+
+  /**
+   * `db`, except that every $transaction starts only once the pool is full of 3-second sleeps:
+   * the moment a burst of requests hits the server. `settle()` waits for the sleeps to end.
+   */
+  function busyAtTransactionStart() {
+    const sleeping: Promise<unknown>[] = [];
+    const transaction = db.$transaction.bind(db) as (
+      fn: (tx: unknown) => Promise<unknown>,
+      options?: object,
+    ) => Promise<unknown>;
+    const busy = new Proxy(db, {
+      get(target, property) {
+        if (property === "$transaction") {
+          return async (fn: (tx: unknown) => Promise<unknown>, options?: object) => {
+            for (let i = 0; i < SLEEPS; i += 1) {
+              // Prisma queries are lazy: Promise.resolve() calls then(), which starts this one now.
+              sleeping.push(Promise.resolve(target.$queryRaw`SELECT 1 AS slept FROM pg_sleep(3)`));
+            }
+            // Let the sleeps take every connection before the transaction asks for one.
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            return transaction(fn, options);
+          };
+        }
+        const value: unknown = Reflect.get(target, property);
+        return typeof value === "function" ? (value as () => unknown).bind(target) : value;
+      },
+    });
+    return { busy, settle: () => Promise.all(sleeping) };
+  }
+
+  it("builds and extends the day's plan where Prisma's 2-second default would fail", async () => {
+    const { busy, settle } = busyAtTransactionStart();
+    // The condition is real: with Prisma's defaults the transaction cannot start in time.
+    await expect(
+      (busy.$transaction as (fn: () => Promise<number>) => Promise<number>)(() =>
+        Promise.resolve(1),
+      ),
+    ).rejects.toMatchObject({ code: "P2028" });
+    await settle();
+
+    const { userId, itemId } = await seedUserWithMcq(db);
+    const built = await getOrCreateSession(userId, { ...deps(NOW), db: busy });
+    expect(built.session.plan.map((entry) => entry.item_id)).toEqual([itemId]);
+    await settle();
+
+    await answer(userId, itemId, plus(NOW, HOUR));
+    const later = await seedMcq(db, userId);
+    const view = await extendSession(userId, { ...deps(plus(NOW, 2 * HOUR)), db: busy });
+    expect(view.planned).toBe(2);
+    expect((await session(userId, plus(NOW, 2 * HOUR))).plan.map((e) => e.item_id)).toEqual([
+      itemId,
+      later.itemId,
+    ]);
+    await settle();
+  }, 60_000);
+});

@@ -8,6 +8,7 @@ export {
   LATENCY_MEDIAN_CACHE_TTL_MS,
   type ExamConfig,
   type QueueConfig,
+  SESSION_TRANSACTION_OPTIONS,
   systemClock,
 } from "./config";
 export { REVIEW_ERROR_STATUS, ReviewError, type ReviewErrorCode } from "./errors";

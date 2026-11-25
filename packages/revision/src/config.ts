@@ -37,6 +37,15 @@ export const LATENCY_MEDIAN_CACHE_TTL_MS = 5 * 60_000;
 export const LATENCY_MEDIAN_CACHE_MAX_ENTRIES = 10_000;
 
 /**
+ * The transaction that builds or extends a day's plan (06-queue-ranker.md §8). It holds one
+ * connection for the session lock while the pools load through the others, so under load it can
+ * wait for a connection, and run, longer than Prisma's defaults (2 s and 5 s): those turned a
+ * busy moment into a 500 (P2028, "Unable to start a transaction in the given time"). It still
+ * fails, rather than hangs, past these.
+ */
+export const SESSION_TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 20_000 } as const;
+
+/**
  * The zone of a user without revision_settings, or with a zone Intl does not know. Equals the
  * column default of revision_settings.timezone (D-22).
  */
