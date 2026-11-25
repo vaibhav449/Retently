@@ -396,7 +396,7 @@ The FSRS worked example in `revision-engine-explained.md` §5 uses illustrative 
 - `npm run db:migrate:dev -- --name <change>` creates and applies development migrations after editing `packages/db/prisma/schema.prisma`.
 - `npm run db:studio` opens Prisma Studio.
 - `npm run dev` runs web, realtime and worker through Turborepo.
-- Planned: add `npm run db:seed` to load a fixture user, notes, a PDF, items and, from Phase 3 on, synthetic review history. No seed command or application models exist yet.
+- `npm run db:seed` loads the synthetic cohort: simulated students with notes, MCQs, weeks of review history, sessions and exams, all written through the revision engine with an injected clock (`eval/synth`, see `eval/README.md`). `--quick` for 3 students over 14 days, `--reset` to remove them. A fixture PDF is not part of it yet.
 - `.env.example` is committed; `.env` never is.
 
 ### 10.5 Security checklist

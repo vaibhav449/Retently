@@ -5,6 +5,9 @@
 node_modules/
 packages/db/src/generated/
 
+# Truth sidecars written by `npm run db:seed` (eval/synth)
+eval/out/
+
 # Build output and caches
 .next/
 dist/

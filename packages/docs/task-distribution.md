@@ -253,7 +253,7 @@ Planned: add CODEOWNERS mirroring this table; the repository does not include th
 - [ ] Daily session view (budget, progress)
 - [x] Exam setup screen (date, notes, target), the exams list and the forecast view
 - [ ] Short-answer path: call Anurag's `gradeShortAnswer()`. If it's slower than about 2 seconds, move it to the worker and return the result over `/events`.
-- [ ] Synthetic-student generator: simulated users with known forgetting parameters, run through `recordReview()` with an injected clock. Add the planned `npm run db:seed` command to load them onto staging; it does not exist yet.
+- [x] Synthetic-student generator: simulated users with known forgetting parameters, run through `recordReview()` with an injected clock, loaded by `npm run db:seed` (`eval/synth`)
 
 **Anurag**
 

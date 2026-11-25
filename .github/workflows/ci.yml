@@ -174,6 +174,10 @@ jobs:
 
       - run: npm run db:migrate
 
+      # The quick synthetic cohort (3 students, 14 days, up to now): the demo student's history,
+      # which the synthetic.e2e.mts smoke test signs in to.
+      - run: npm run db:seed -- --quick
+
       - name: Install Chromium for Playwright
         working-directory: apps/web
         run: npx playwright install --with-deps chromium
