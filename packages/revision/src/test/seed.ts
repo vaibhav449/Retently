@@ -241,3 +241,32 @@ export async function markPending(
     },
   });
 }
+
+/**
+ * An exams row written directly, for exams the API would refuse (a past date) or tests that need
+ * an exact row. `examDate` is "YYYY-MM-DD"; keys default to `src:<sourceId>` of `sourceIds`.
+ */
+export async function seedExam(
+  db: Database,
+  userId: string,
+  opts: {
+    examDate: string;
+    sourceIds?: string[];
+    topicKeys?: string[];
+    target?: number;
+    at?: Date;
+  },
+): Promise<string> {
+  const at = opts.at ?? new Date();
+  const exam = await db.exam.create({
+    data: {
+      userId,
+      examDate: new Date(`${opts.examDate}T00:00:00.000Z`),
+      topicKeys: opts.topicKeys ?? (opts.sourceIds ?? []).map((id) => `src:${id}`),
+      targetRetention: opts.target ?? 0.9,
+      createdAt: at,
+      updatedAt: at,
+    },
+  });
+  return exam.id;
+}

@@ -56,7 +56,7 @@ const pools = (userId: string, now = NOW, cfg = DEFAULT_QUEUE) =>
   loadPools(
     db,
     userId,
-    { now, cutoff: startOfNextLocalDay(now, "Asia/Kolkata") },
+    { now, cutoff: startOfNextLocalDay(now, "Asia/Kolkata"), timeZone: "Asia/Kolkata" },
     { medians: latencyMediansFromDb(db, DEFAULT_GRADING.latency), cfg },
   );
 const ids = (rows: readonly { itemId: string }[]) => rows.map((row) => row.itemId).sort();
