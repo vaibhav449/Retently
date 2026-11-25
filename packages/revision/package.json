@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:perf": "vitest run --config vitest.perf.config.ts",
     "engine:rebuild": "tsx src/rebuild/cli.ts rebuild",
     "engine:check": "tsx src/rebuild/cli.ts check"
   },

@@ -130,6 +130,10 @@ jobs:
 
       - run: npm run test:integration
 
+      # Timing budgets (QA7), on their own after the suites above: run alongside them, other test
+      # files competing for the runner's CPU and database skewed the timings.
+      - run: npm run test:perf
+
   e2e:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest
