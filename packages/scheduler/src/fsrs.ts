@@ -1,4 +1,4 @@
-import { default_w, FSRSAlgorithm } from "ts-fsrs";
+import { computeDecayFactor, default_w, FSRSAlgorithm } from "ts-fsrs";
 import { fsrsCardStateSchema } from "./schema";
 import { addDays, daysBetween } from "./time";
 import type { CardState, FsrsCardState, Grade, Scheduler } from "./types";
@@ -16,6 +16,26 @@ const FSRS6_V1 = {
 };
 
 const algorithm = new FSRSAlgorithm(FSRS6_V1);
+
+/** The forgetting curve's shape under FSRS6_V1's parameters: R(t, S) = (1 + factor·t/S)^decay. */
+const CURVE = computeDecayFactor(FSRS6_V1.w);
+
+/**
+ * m(T) = (T^(1/decay) − 1) / factor (07-exam-mode.md §2): the interval at which fsrs6-v1's recall
+ * falls to `targetRetention`, in units of stability. So R(t, S) ≥ T ⟺ S ≥ t / m(T), and m(0.9) = 1.
+ * Same parameters as fsrs6V1, unrounded (the library rounds its own to 8 decimals).
+ */
+export function intervalModifier(targetRetention: number): number {
+  if (!(targetRetention > 0 && targetRetention < 1)) {
+    throw new RangeError(`intervalModifier: target retention ${targetRetention} is not in (0, 1)`);
+  }
+  return (targetRetention ** (1 / CURVE.decay) - 1) / CURVE.factor;
+}
+
+/** fsrs6-v1's forgetting curve without the library's rounding: for closed-form tests. */
+export function fsrs6Recall(elapsedDays: number, stabilityDays: number): number {
+  return (1 + (CURVE.factor * elapsedDays) / stabilityDays) ** CURVE.decay;
+}
 
 interface Memory {
   difficulty: number;
