@@ -25,6 +25,7 @@
     "db:generate": "npm run generate --workspace @repo/db",
     "db:migrate:dev": "npm run migrate:dev --workspace @repo/db --",
     "db:studio": "npm run studio --workspace @repo/db",
+    "db:seed": "npm run seed --workspace @repo/eval --",
     "engine:rebuild": "npm run engine:rebuild --workspace @repo/revision",
     "engine:check": "npm run engine:check --workspace @repo/revision"
   },
@@ -34,6 +35,7 @@
   },
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "eval"
   ]
 }
