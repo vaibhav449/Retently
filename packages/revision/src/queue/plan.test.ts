@@ -52,7 +52,7 @@ describe("plan JSON schemas (QD-15)", () => {
   it("accept a valid entry and meta", () => {
     expect(planEntrySchema.parse(ENTRY)).toEqual(ENTRY);
     const meta = planMeta(
-      { N: 30, qNew: 8, qOld: 22, misReserve: 2, backlog: false, avgCostSec: 30 },
+      { N: 30, qNew: 8, qOld: 22, misReserve: 2, backlog: false, avgCostSec: 30, examIds: [] },
       DEFAULT_QUEUE,
       NOW,
     );
@@ -118,6 +118,7 @@ describe("planFor (06 §1, QA4)", () => {
       misReserve: 2,
       backlog: false,
       avgCostSec: 30,
+      examIds: [],
     });
     expect(entries).toHaveLength(22);
     const count = (category: string) =>

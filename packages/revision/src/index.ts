@@ -1,14 +1,51 @@
 export {
   createDefaultRegistry,
+  DEFAULT_EXAM,
   DEFAULT_GRADING,
   DEFAULT_QUEUE,
   DEFAULT_TIME_ZONE,
   LATENCY_MEDIAN_CACHE_MAX_ENTRIES,
   LATENCY_MEDIAN_CACHE_TTL_MS,
+  type ExamConfig,
   type QueueConfig,
   systemClock,
 } from "./config";
 export { REVIEW_ERROR_STATUS, ReviewError, type ReviewErrorCode } from "./errors";
+export { createForecastCache, type ForecastCache, forecastKey } from "./exam/cache";
+export {
+  activeExams,
+  createExam,
+  deleteExam,
+  type ExamDeps,
+  type ExamScopeOption,
+  examScopeOptions,
+  findExam,
+  getExam,
+  listExams,
+  updateExam,
+} from "./exam/exams";
+export { buildForecast, type ForecastInput, lapseRate, type StoredExam } from "./exam/forecast";
+export { forecastFor } from "./exam/forecast-io";
+export { type ForecastDeps, loadForecastInput } from "./exam/load";
+export { requiredStability, rExam, shortfallNorm, stabilityMultipliers } from "./exam/recall";
+export {
+  atTarget,
+  createSimulator,
+  requiredCapacity,
+  type SimItem,
+  type SimResult,
+  simulatePlan,
+} from "./exam/simulate";
+export { type ActiveExam, examTermFor, isExamDue, ramp } from "./exam/term";
+export {
+  checkExamDate,
+  EXAM_ERROR_STATUS,
+  ExamError,
+  type ExamErrorCode,
+  parseExamInput,
+  parseExamUpdate,
+  parseTopicKey,
+} from "./exam/validate";
 export { type GradableItem, gradeLocally } from "./grading/gradeResponse";
 export {
   cachedLatencyMedians,
@@ -32,7 +69,14 @@ export {
   type ReviewFacts,
 } from "./misconception";
 export { type ReasonKind, reasonFor } from "./queue/explain";
-export { type PlanEntry, type PlanMeta, configHash, planFor, type PlanInput } from "./queue/plan";
+export {
+  configHash,
+  examDuePool,
+  type PlanEntry,
+  planFor,
+  type PlanInput,
+  type PlanMeta,
+} from "./queue/plan";
 export {
   extendSession,
   getOrCreateSession,
@@ -70,4 +114,13 @@ export { type AnswerDeps, answerReview } from "./review/answer";
 export { type PresentDeps, presentNext } from "./review/present";
 export { shuffleBySeed } from "./review/shuffle";
 export { userRevisionSettings, userTimeZone } from "./settings";
-export { localDateOf, resolveTimeZone, startOfNextLocalDay } from "./time";
+export {
+  addLocalDays,
+  localDateOf,
+  localDayStarts,
+  localDaysBetween,
+  resolveTimeZone,
+  startOfLocalDate,
+  startOfLocalDay,
+  startOfNextLocalDay,
+} from "./time";

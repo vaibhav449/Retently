@@ -92,3 +92,66 @@ export function resolveTimeZone(value: string | null | undefined): string {
     throw error;
   }
 }
+
+const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** A calendar date "YYYY-MM-DD" as its UTC-midnight instant; throws for anything else. */
+function utcMidnight(date: string): number {
+  const match = DATE_PATTERN.exec(date);
+  const ms = match ? Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : NaN;
+  if (!Number.isFinite(ms) || new Date(ms).toISOString().slice(0, 10) !== date) {
+    throw new RangeError(`not a calendar date: ${date}`);
+  }
+  return ms;
+}
+
+/** The calendar date `days` days after `date` (both "YYYY-MM-DD"); no zone involved. */
+export function addLocalDays(date: string, days: number): string {
+  return new Date(utcMidnight(date) + days * 24 * HOUR_MS).toISOString().slice(0, 10);
+}
+
+/** Calendar days from `from` to `to` ("YYYY-MM-DD"), negative when `to` comes first. */
+export function localDaysBetween(from: string, to: string): number {
+  return Math.round((utcMidnight(to) - utcMidnight(from)) / (24 * HOUR_MS));
+}
+
+/**
+ * The first instant of the calendar date `date` ("YYYY-MM-DD") in `timeZone`: an exam's exam_at
+ * (07-exam-mode.md §2). When DST skips midnight it is the first instant that exists (e.g. 01:00).
+ * A binary search on local dates, like startOfNextLocalDay(). `timeZone` must be valid.
+ */
+export function startOfLocalDate(date: string, timeZone: string): Date {
+  const formatter = formatterFor(timeZone);
+  const noon = utcMidnight(date) + 12 * HOUR_MS;
+  const target = Number(date.replaceAll("-", ""));
+  // Every zone is within ±14 h of UTC, so the date has begun by noon UTC + 48 h and not by −48 h.
+  // Invariant: localDate(lo) < target ≤ localDate(hi).
+  let lo = noon - SEARCH_SPAN_MS;
+  let hi = noon + SEARCH_SPAN_MS;
+  while (hi - lo > 1) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (localDate(mid, formatter) >= target) hi = mid;
+    else lo = mid;
+  }
+  return new Date(hi);
+}
+
+/** The first instant of `at`'s calendar date in `timeZone`. `timeZone` must be valid. */
+export function startOfLocalDay(at: Date, timeZone: string): Date {
+  return startOfLocalDate(localDateOf(at, timeZone), timeZone);
+}
+
+/**
+ * The boundaries of `days` local days from `today` on: `days + 1` instants, the start of `today`
+ * first and the start of the day after the last one last, each from startOfNextLocalDay(), so a
+ * DST change makes a day 23 or 25 hours long instead of shifting the next. The forecast's study
+ * days (07 §5.1). `timeZone` must be valid.
+ */
+export function localDayStarts(today: string, days: number, timeZone: string): Date[] {
+  if (!Number.isInteger(days) || days < 0) throw new RangeError(`localDayStarts: ${days} days`);
+  const starts = [startOfLocalDate(today, timeZone)];
+  for (let day = 1; day <= days; day += 1) {
+    starts.push(startOfNextLocalDay(starts[day - 1] as Date, timeZone));
+  }
+  return starts;
+}

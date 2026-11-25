@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TIME_ZONE } from "./config";
-import { localDateOf, resolveTimeZone, startOfNextLocalDay } from "./time";
+import {
+  addLocalDays,
+  localDateOf,
+  localDayStarts,
+  localDaysBetween,
+  resolveTimeZone,
+  startOfLocalDate,
+  startOfLocalDay,
+  startOfNextLocalDay,
+} from "./time";
 
 /**
  * 05-review-pipeline.md §6.2, IMPLEMENTATION_PLAN §4.7. Each expected value was checked against a
@@ -258,5 +267,73 @@ describe("localDateOf (06 §8, QA5)", () => {
 
   it("refuses an invalid date", () => {
     expect(() => localDateOf(new Date(Number.NaN), "UTC")).toThrow(RangeError);
+  });
+});
+
+describe("startOfLocalDate and startOfLocalDay (07-exam-mode.md §2: exam_at)", () => {
+  it.each([
+    ["Asia/Kolkata", "2026-12-03", "2026-12-02T18:30:00.000Z", "IST midnight"],
+    ["UTC", "2026-12-03", "2026-12-03T00:00:00.000Z", "UTC midnight"],
+    ["America/Santiago", "2026-09-06", "2026-09-06T04:00:00.000Z", "midnight skipped: 01:00"],
+    ["America/Havana", "2026-03-08", "2026-03-08T05:00:00.000Z", "midnight skipped: 01:00"],
+    ["Pacific/Kiritimati", "2026-01-01", "2025-12-31T10:00:00.000Z", "UTC+14"],
+    ["Pacific/Pago_Pago", "2026-01-01", "2026-01-01T11:00:00.000Z", "UTC−11"],
+  ])("%s %s → %s (%s)", (zone, date, expected) => {
+    expect(startOfLocalDate(date, zone).toISOString()).toBe(expected);
+  });
+
+  it("is the first instant of the date, for every day of a year in many zones", () => {
+    for (const zone of SWEEP_ZONES) {
+      for (let day = 0; day < 366; day += 1) {
+        const date = addLocalDays("2026-01-01", day);
+        const start = startOfLocalDate(date, zone).getTime();
+        expect(oracleLocalDate(start, zone), `${zone} ${date}`).toBe(date);
+        expect(oracleLocalDate(start - 1, zone) < date, `${zone} ${date}`).toBe(true);
+      }
+    }
+  });
+
+  it("startOfLocalDay at exactly midnight is that instant; 1 ms before is the previous day's", () => {
+    const midnight = new Date("2026-12-02T18:30:00.000Z");
+    expect(startOfLocalDay(midnight, "Asia/Kolkata")).toEqual(midnight);
+    expect(startOfLocalDay(new Date(midnight.getTime() - 1), "Asia/Kolkata").toISOString()).toBe(
+      "2026-12-01T18:30:00.000Z",
+    );
+  });
+
+  it("refuses a string that is not a calendar date", () => {
+    for (const bad of ["2026-02-30", "2026-13-01", "3 December", "2026-1-01"]) {
+      expect(() => startOfLocalDate(bad, "UTC")).toThrow(RangeError);
+    }
+  });
+});
+
+describe("calendar-day arithmetic", () => {
+  it("adds and counts days across months, years and leap days", () => {
+    expect(addLocalDays("2026-11-19", 14)).toBe("2026-12-03");
+    expect(addLocalDays("2026-12-31", 1)).toBe("2027-01-01");
+    expect(addLocalDays("2028-02-28", 1)).toBe("2028-02-29");
+    expect(addLocalDays("2026-03-01", -1)).toBe("2026-02-28");
+    expect(localDaysBetween("2026-11-19", "2026-12-03")).toBe(14);
+    expect(localDaysBetween("2026-12-03", "2026-11-19")).toBe(-14);
+    expect(localDaysBetween("2026-11-19", "2026-11-19")).toBe(0);
+  });
+});
+
+describe("localDayStarts (07 §5.1: the forecast's study days)", () => {
+  it("gives days + 1 boundaries, a 23-hour day when DST skips an hour", () => {
+    const starts = localDayStarts("2026-09-05", 2, "America/Santiago").map((d) => d.toISOString());
+    expect(starts).toEqual([
+      "2026-09-05T04:00:00.000Z",
+      "2026-09-06T04:00:00.000Z",
+      "2026-09-07T03:00:00.000Z",
+    ]);
+  });
+
+  it("ends at the start of the last date, and gives one boundary for no days", () => {
+    const starts = localDayStarts("2026-11-19", 14, "Asia/Kolkata");
+    expect(starts).toHaveLength(15);
+    expect(starts.at(-1)).toEqual(startOfLocalDate("2026-12-03", "Asia/Kolkata"));
+    expect(localDayStarts("2026-11-19", 0, "UTC")).toEqual([new Date("2026-11-19T00:00:00Z")]);
   });
 });

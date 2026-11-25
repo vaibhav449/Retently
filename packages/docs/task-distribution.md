@@ -245,9 +245,13 @@ Planned: add CODEOWNERS mirroring this table; the repository does not include th
   - the backlog override
   - topic interleaving
   - a golden test that expects the order B → C → A → E → F → D
-- [ ] Exam mode: `exams` table and API, `R_exam` for every in-scope item, and urgency fed into the ranker
+- [x] Exam mode: `exams` table and API, `R_exam` for every in-scope item, and urgency fed into the ranker
+  - scope = notes (`src:<source_id>` topic keys) until topics exist
+  - exam term and the exam-due pool in the daily queue
+  - the forecast: required and recommended reviews a day, and a status sentence
 - [ ] Review screens for MCQ, cloze and short answer, with the citation after reveal
-- [ ] Daily session view (budget, progress) and the exam setup screen (date + topics)
+- [ ] Daily session view (budget, progress)
+- [x] Exam setup screen (date, notes, target), the exams list and the forecast view
 - [ ] Short-answer path: call Anurag's `gradeShortAnswer()`. If it's slower than about 2 seconds, move it to the worker and return the result over `/events`.
 - [ ] Synthetic-student generator: simulated users with known forgetting parameters, run through `recordReview()` with an injected clock. Add the planned `npm run db:seed` command to load them onto staging; it does not exist yet.
 

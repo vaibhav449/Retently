@@ -1,5 +1,16 @@
-import type { ItemType } from "@repo/contracts";
-import { createRegistry, fsrs6V1, placeholderV0, type SchedulerRegistry } from "@repo/scheduler";
+import {
+  EXAM_DEFAULT_TARGET,
+  EXAM_MAX_TOPIC_KEYS,
+  EXAM_TARGET_BOUNDS,
+  type ItemType,
+} from "@repo/contracts";
+import {
+  createRegistry,
+  fsrs6V1,
+  type Grade,
+  placeholderV0,
+  type SchedulerRegistry,
+} from "@repo/scheduler";
 import type { GradingConfig } from "./grading/mapping";
 import type { Clock } from "./record/recordReview";
 
@@ -75,7 +86,10 @@ export interface QueueConfig {
   costPriorAvgSec: number;
   /** The item types the review screen can present; nothing else enters a plan. MCQ only for now. */
   servedTypes: readonly ItemType[];
-  /** The exam term's constants (07 §4.1). Used once exam mode lands; exam_term is 0 until then. */
+  /**
+   * The exam term's constants (07 §4.1): ramp = exp(−days to the exam / tauDays), and an in-scope
+   * item gets ramp · (scopeShare + (1 − scopeShare) · shortfall_norm).
+   */
   exam: { tauDays: number; scopeShare: number };
 }
 
@@ -100,6 +114,58 @@ export const DEFAULT_QUEUE: QueueConfig = {
   costPriorAvgSec: 30,
   servedTypes: ["mcq"],
   exam: { tauDays: 10, scopeShare: 0.5 },
+};
+
+/** Exam mode's constants (07-exam-mode.md). The exam term's are in QueueConfig.exam. */
+export interface ExamConfig {
+  /** target_retention outside this range is refused (07 §6; the CHECK on exams). */
+  targetBounds: readonly [number, number];
+  /** An exam created without a target. */
+  defaultTarget: number;
+  /**
+   * fsrs6-v1's request_retention. Up to it, exam-due adds nothing (07 §4.2) and the forecast uses
+   * due dates only; above it, the forecast also reviews items once they fall below the target.
+   */
+  schedulerRetention: number;
+  /** exam_date at most this many days after the user's local today (EM-12). */
+  maxDaysAhead: number;
+  /** At most this many exams on today or later per user (EM-12). */
+  maxUpcomingExams: number;
+  /** At most this many notes per exam. */
+  maxScopeKeys: number;
+  /** The simulation grades every review this (07 §5.1). */
+  assumedGrade: Grade;
+  /** Simulated reviews happen this many hours after the local day starts (07 §5.1). */
+  middayHours: number;
+  /** λ is the Again share of this many newest solo reviews (07 §5.3). */
+  lapseWindow: number;
+  /** With fewer solo reviews than this, λ is lapsePrior. */
+  lapseMinReviews: number;
+  lapsePrior: number;
+  /** Buckets of the R_exam histogram. */
+  histogramBuckets: number;
+  /** A computed forecast is reused for this long (07 §5.2). */
+  cacheTtlMs: number;
+  /** At most this many forecasts are cached per process. */
+  cacheMaxEntries: number;
+}
+
+/** Exam mode in production (07-exam-mode.md). Tests inject their own. */
+export const DEFAULT_EXAM: ExamConfig = {
+  targetBounds: EXAM_TARGET_BOUNDS,
+  defaultTarget: EXAM_DEFAULT_TARGET,
+  schedulerRetention: 0.9,
+  maxDaysAhead: 365,
+  maxUpcomingExams: 10,
+  maxScopeKeys: EXAM_MAX_TOPIC_KEYS,
+  assumedGrade: 3,
+  middayHours: 12,
+  lapseWindow: 200,
+  lapseMinReviews: 30,
+  lapsePrior: 0.15,
+  histogramBuckets: 10,
+  cacheTtlMs: 10 * 60_000,
+  cacheMaxEntries: 500,
 };
 
 /**

@@ -22,7 +22,7 @@ export interface Candidate {
 export interface Features {
   /** overdue_pressure ∈ [0, overdueCap]. */
   overdue: number;
-  /** exam_term ∈ [0, 1]; 0 until exam mode lands. */
+  /** exam_term ∈ [0, 1] (07 §4.1); 0 when no active exam covers the item. */
   exam: number;
   /** misconception_flag ∈ {0, 1}. */
   mis: number;
@@ -107,17 +107,18 @@ export function extractFeatures(
   ctx: FeatureContext,
   /** stabilityOf(candidate.card), when the caller has it already. */
   stabilityDays: number = stabilityOf(candidate.card, ctx.registry),
+  /** exam_term from examTermFor() (07 §4.1); 0 when no active exam covers the item. */
+  examTerm = 0,
 ): Features {
   const { card } = candidate;
   const weak = ctx.weaknessByTopic.get(candidate.topicKey) ?? 0;
-  if (card === null) return { overdue: 0, exam: 0, mis: 0, weak, cov: 1 };
+  if (card === null) return { overdue: 0, exam: examTerm, mis: 0, weak, cov: 1 };
 
   const stability = Math.max(stabilityDays, ctx.stabilityFloorDays);
   const lateDays = Math.max(0, daysBetween(ctx.now, card.dueAt));
   return {
     overdue: Math.min(lateDays / stability, ctx.overdueCap),
-    // Exam mode is a later feature (07); the slot and its weight stay (Q1.3).
-    exam: 0,
+    exam: examTerm,
     mis: isOpenMisconception(card, ctx.cutoff) ? 1 : 0,
     weak,
     cov: 0,

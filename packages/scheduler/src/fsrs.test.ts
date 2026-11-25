@@ -2,7 +2,7 @@
 // §6.1-6.4). If either changes, these fail on purpose: regenerate deliberately, as a new version.
 import { createEmptyCard, fsrs } from "ts-fsrs";
 import { describe, expect, it } from "vitest";
-import { fsrs6V1 } from "./fsrs";
+import { fsrs6Recall, fsrs6V1, intervalModifier } from "./fsrs";
 import { DAY_MS } from "./time";
 import type { FsrsCardState, Grade } from "./types";
 
@@ -246,5 +246,41 @@ describe("fsrs6-v1 properties (1000 random cases each)", () => {
       lapses: 0,
     } as const;
     expect(() => fsrs6V1.next(placeholder, 3, T0)).toThrow(/"placeholder"/);
+  });
+});
+
+describe("intervalModifier (07-exam-mode.md §2)", () => {
+  it("reproduces the m(T) table", () => {
+    const table: [number, number][] = [
+      [0.8, 3.316],
+      [0.85, 1.906],
+      [0.9, 1.0],
+      [0.95, 0.403],
+    ];
+    for (const [target, m] of table) expect(intervalModifier(target)).toBeCloseTo(m, 3);
+  });
+
+  it("is 1 at the scheduler's own target, within the library's rounding", () => {
+    expect(Math.abs(intervalModifier(0.9) - 1)).toBeLessThan(1e-8);
+  });
+
+  it("agrees with fsrs6-v1's retrievability: recall after m(T)·S days is T", () => {
+    for (const stability of [0.5, 2.3, 10, 49.7, 300]) {
+      for (const target of [0.8, 0.85, 0.9, 0.95, 0.97]) {
+        const card = reviewed(5, stability);
+        const at = days(intervalModifier(target) * stability);
+        expect(fsrs6V1.retrievability(card, at)).toBeCloseTo(target, 7);
+        expect(fsrs6Recall(intervalModifier(target) * stability, stability)).toBeCloseTo(
+          target,
+          12,
+        );
+      }
+    }
+  });
+
+  it("refuses a target outside (0, 1)", () => {
+    for (const target of [0, 1, -0.1, 1.2, Number.NaN]) {
+      expect(() => intervalModifier(target)).toThrow(RangeError);
+    }
   });
 });

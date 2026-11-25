@@ -1,4 +1,4 @@
-export { fsrs6V1 } from "./fsrs";
+export { fsrs6Recall, fsrs6V1, intervalModifier } from "./fsrs";
 export { placeholderV0 } from "./placeholder";
 export { createRegistry, type SchedulerRegistry } from "./registry";
 export { type LoggedReview, replay } from "./replay";

@@ -15,7 +15,6 @@ datasource db {
 //   documents.yjs_state, document_access          → Phase 2 (collaboration)
 //   chunks.embedding                              → Phase 2 (embedding model not chosen; its size is baked into the column)
 //   topics, items.topic_id, chunks.topic_id       → Phase 3
-//   exams                                         → Phase 3 (exam mode)
 //
 // CHECK constraints that Prisma cannot express live in the migration SQL.
 
@@ -44,6 +43,7 @@ model User {
   reviewSessions   ReviewSession[]
   reviewsPending   ReviewPending[]
   revisionSettings RevisionSettings?
+  exams            Exam[]
 
   @@map("users")
 }
@@ -336,6 +336,28 @@ model RevisionSettings {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("revision_settings")
+}
+
+/// One exam a user is preparing for (07-exam-mode.md). The migration adds CHECKs: a non-empty
+/// scope and a target between 0.8 and 0.97.
+model Exam {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id")
+  /// The exam's calendar date in the user's time zone; it starts at that local day's first instant.
+  examDate        DateTime @map("exam_date") @db.Date
+  /// What the exam covers: "src:<source_id>" until items carry a topic. Topic keys, not
+  /// 03-data-model.md's topic_ids uuid[] (D-53); checked by the API, since arrays carry no FKs.
+  topicKeys       String[] @map("topic_keys")
+  /// Recall to reach on exam day. double precision, not real: float4 reads 0.9 back as 0.8999999762.
+  targetRetention Float    @default(0.9) @map("target_retention")
+  /// Set from the injected clock, like every time the engine writes.
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, examDate], map: "exams_user")
+  @@map("exams")
 }
 
 // ─── LLM cost tracking ───────────────────────────────────────────────────────

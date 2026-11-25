@@ -13,6 +13,10 @@ export interface ReasonContext {
   sourceTitle?: string;
   /** For the overdue message: days since the card's due date. */
   overdueDays?: number;
+  /** For the exam message: local calendar days from today to the exam (EM-11). */
+  examDays?: number;
+  /** For the exam message: the item's predicted recall on exam day; 0 for a new item. */
+  rExam?: number;
 }
 
 /**
@@ -41,7 +45,7 @@ export function reasonFor(
       kind = candidate;
     }
   }
-  return { kind, message: messageFor(kind, ctx) };
+  return { kind, message: messageFor(kind, entry.category, ctx) };
 }
 
 function fallbackKind(category: ReviewCategory): ReasonKind {
@@ -49,7 +53,13 @@ function fallbackKind(category: ReviewCategory): ReasonKind {
   return category === "new" ? "coverage" : "overdue";
 }
 
-function messageFor(kind: ReasonKind, ctx: ReasonContext): string {
+/** "in 5 days", "tomorrow", "today". */
+function whenExam(days: number): string {
+  if (days <= 0) return "today";
+  return days === 1 ? "tomorrow" : `in ${days} days`;
+}
+
+function messageFor(kind: ReasonKind, category: ReviewCategory, ctx: ReasonContext): string {
   switch (kind) {
     case "misconception":
       return "You were sure about this and got it wrong — let's check it again.";
@@ -58,8 +68,15 @@ function messageFor(kind: ReasonKind, ctx: ReasonContext): string {
       const when = days <= 0 ? "Due today" : days === 1 ? "Due 1 day ago" : `Due ${days} days ago`;
       return `${when}; your memory of this is fading.`;
     }
-    case "exam":
-      return "This is on your upcoming exam.";
+    case "exam": {
+      if (ctx.examDays === undefined) return "This is on your upcoming exam.";
+      const when = whenExam(ctx.examDays);
+      if (category === "new" || ctx.rExam === undefined) {
+        return `New material for your exam ${when}.`;
+      }
+      const recall = Math.round(100 * ctx.rExam);
+      return `Your exam is ${when} and your predicted recall here is ${recall}%.`;
+    }
     case "weakness":
       return "One of your weaker topics.";
     case "coverage":

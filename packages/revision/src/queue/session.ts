@@ -15,6 +15,7 @@ import { userRevisionSettings } from "../settings";
 import { localDateOf, startOfNextLocalDay } from "../time";
 import { loadPools } from "./load";
 import {
+  examDuePool,
   type PlanEntry,
   planFor,
   type PlanMeta,
@@ -59,6 +60,8 @@ export interface TodaySession {
   cutoff: Date;
   /** The user's budget now (revision_settings); an extension uses it (Q-E20). */
   budgetSec: number;
+  /** The user's zone, which places each exam's exam_at. */
+  timeZone: string;
 }
 
 type SessionRow = Awaited<ReturnType<Database["reviewSession"]["findUniqueOrThrow"]>>;
@@ -113,8 +116,12 @@ function mediansOf(deps: SessionDeps): LatencyMedianSource {
  * The pools at `now`, read through the connection pool: called under the session lock, its
  * parallel queries would otherwise queue up on the transaction's one connection.
  */
-async function poolsAt(userId: string, now: Date, cutoff: Date, deps: SessionDeps) {
-  return loadPools(deps.db, userId, { now, cutoff }, { medians: mediansOf(deps), cfg: deps.queue });
+async function poolsAt(
+  userId: string,
+  at: { now: Date; cutoff: Date; timeZone: string },
+  deps: SessionDeps,
+) {
+  return loadPools(deps.db, userId, at, { medians: mediansOf(deps), cfg: deps.queue });
 }
 
 /**
@@ -129,7 +136,13 @@ export async function getOrCreateSession(userId: string, deps: SessionDeps): Pro
   const { timeZone, budgetSec } = await userRevisionSettings(deps.db, userId, deps.queue);
   const localDate = localDateOf(now, timeZone);
   const cutoff = startOfNextLocalDay(now, timeZone);
-  const today = (session: StoredSession): TodaySession => ({ session, now, cutoff, budgetSec });
+  const today = (session: StoredSession): TodaySession => ({
+    session,
+    now,
+    cutoff,
+    budgetSec,
+    timeZone,
+  });
 
   const existing = await findSession(deps.db, userId, localDate);
   if (existing !== null && existing.plan.length > 0) return today(existing);
@@ -139,7 +152,7 @@ export async function getOrCreateSession(userId: string, deps: SessionDeps): Pro
     const row = await findSession(tx, userId, localDate);
     if (row !== null && row.plan.length > 0) return row;
 
-    const pools = await poolsAt(userId, now, cutoff, deps);
+    const pools = await poolsAt(userId, { now, cutoff, timeZone }, deps);
     const { entries, numbers } = planFor(
       { ...pools, now, cutoff, registry: deps.registry, budgetSec, ext: 0 },
       deps.queue,
@@ -166,7 +179,8 @@ type EntryState = "done" | "open" | "skipped";
 
 /**
  * Where each plan entry stands now (06 §8, Q6.2): done (a solo answer since the session was
- * created), open (live, readable, servable, not pending, and still due today or new), or skipped.
+ * created), open (live, readable, servable, not pending, and still due today, new, or planned as
+ * exam-due: EM-10, since those are by definition not due today), or skipped.
  * Re-validated lazily on every call, so an item answered elsewhere, retired, made unreadable or
  * pending drops out silently (Q-E13–Q-E15).
  */
@@ -208,6 +222,7 @@ async function entryStates(
   return plan.map((entry) => {
     if (done.has(entry.item_id)) return "done";
     if (!liveIds.has(entry.item_id) || pendingIds.has(entry.item_id)) return "skipped";
+    if (entry.exam_due === true) return "open";
     const card = cardOf.get(entry.item_id);
     if (card === undefined) return "open";
     return effectiveDueAt(card).getTime() < today.cutoff.getTime() ? "open" : "skipped";
@@ -221,15 +236,28 @@ function progressOf(states: readonly EntryState[]): SessionProgress {
   return { done, planned: done + open };
 }
 
-/** True when the pools, recomputed now, hold a candidate that is not in the plan yet. */
+/**
+ * True when the pools, recomputed now, hold a candidate that is not in the plan yet: due, new, or
+ * exam-due under the exams as they are now (ER3.5).
+ */
 async function canExtend(userId: string, today: TodaySession, deps: SessionDeps): Promise<boolean> {
   const inPlan = new Set(today.session.plan.map((entry) => entry.item_id));
-  const pools = await poolsAt(userId, today.now, today.cutoff, deps);
-  return [...pools.old, ...pools.fresh].some((candidate) => !inPlan.has(candidate.itemId));
+  const pools = await poolsAt(userId, today, deps);
+  const examDue = examDuePool({ ...pools, now: today.now, registry: deps.registry });
+  return [...pools.old, ...examDue, ...pools.fresh].some(
+    (candidate) => !inPlan.has(candidate.itemId),
+  );
 }
 
 export type NextInSession =
-  | { kind: "entry"; sessionId: string; entry: PlanEntry; progress: SessionProgress }
+  | {
+      kind: "entry";
+      sessionId: string;
+      /** The session's local date, for the why line's "your exam is in 5 days". */
+      localDate: string;
+      entry: PlanEntry;
+      progress: SessionProgress;
+    }
   | { kind: "done"; canExtend: boolean }
   | { kind: "nothing" };
 
@@ -247,7 +275,13 @@ export async function nextInSession(userId: string, deps: SessionDeps): Promise<
   const index = states.indexOf("open");
   const entry = plan[index];
   if (entry !== undefined) {
-    return { kind: "entry", sessionId: today.session.id, entry, progress: progressOf(states) };
+    return {
+      kind: "entry",
+      sessionId: today.session.id,
+      localDate: today.session.localDate,
+      entry,
+      progress: progressOf(states),
+    };
   }
   return { kind: "done", canExtend: await canExtend(userId, today, deps) };
 }
@@ -256,12 +290,14 @@ export async function nextInSession(userId: string, deps: SessionDeps): Promise<
  * "Study more" (06 §8, Q6.4, QD-12): the same selection over candidates not in the plan, with the
  * new-item cap lifted and N from the user's budget now (Q-E20), appended to the plan and
  * interleaved on from its last topic; extended_count + 1 and one more meta.extensions record.
+ * The exams are read as they are now, so one created since the morning counts from here on, and
+ * meta.exam_ids becomes the union (ER3.5, E12).
  * Serialised with building by the session lock, so two concurrent extends never add an item twice
  * (Q-E19). With nothing to add, the session is unchanged.
  */
 export async function extendSession(userId: string, deps: SessionDeps): Promise<ReviewSessionView> {
   const today = await getOrCreateSession(userId, deps);
-  const { now, cutoff, budgetSec } = today;
+  const { now, cutoff, budgetSec, timeZone } = today;
   const { localDate } = today.session;
 
   await deps.db.$transaction(async (tx) => {
@@ -269,7 +305,7 @@ export async function extendSession(userId: string, deps: SessionDeps): Promise<
     const row = await findSession(tx, userId, localDate);
     if (row === null) return;
 
-    const pools = await poolsAt(userId, now, cutoff, deps);
+    const pools = await poolsAt(userId, { now, cutoff, timeZone }, deps);
     const ext = row.extendedCount + 1;
     const { entries, numbers } = planFor(
       {
@@ -288,9 +324,16 @@ export async function extendSession(userId: string, deps: SessionDeps): Promise<
 
     const meta: PlanMeta = {
       ...row.meta,
+      exam_ids: [...new Set([...row.meta.exam_ids, ...numbers.examIds])].sort(),
       extensions: [
         ...row.meta.extensions,
-        { at: now.toISOString(), N: numbers.N, added: entries.length, backlog: numbers.backlog },
+        {
+          at: now.toISOString(),
+          N: numbers.N,
+          added: entries.length,
+          backlog: numbers.backlog,
+          exam_ids: numbers.examIds,
+        },
       ],
     };
     await tx.reviewSession.update({
@@ -328,5 +371,7 @@ export async function sessionView(userId: string, deps: SessionDeps): Promise<Re
     ...progressOf(states),
     composition,
     exam_ids: session.meta.exam_ids,
+    // The latest plan's: the first one's, or the last extension's (QD-13).
+    backlog: session.meta.extensions.at(-1)?.backlog ?? session.meta.backlog,
   });
 }
