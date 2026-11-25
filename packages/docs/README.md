@@ -54,7 +54,7 @@ The worker consumes ingest jobs, but nothing publishes them yet. Their results r
 | `npm run <script> --workspace @repo/web`         | Run one package's script                                                                    |
 | `npm install <dependency> --workspace @repo/web` | Add a dependency to one package                                                             |
 
-No `db:seed` command is implemented yet. Seed users, notes, questions, and synthetic review histories belong to the roadmap.
+`npm run db:seed` replaces the synthetic cohort (users on `@synthetic.invalid`) with simulated students and weeks of review history, driven through the real engine. `npm run db:seed -- --quick` seeds 3 students over 14 days; `--reset` only removes them. It refuses any database not on this machine without `--allow-remote`. Sign in as `demo@synthetic.invalid` / `synthetic-demo` to see the result. Details: [`eval/README.md`](../../eval/README.md).
 
 ## Reading order
 
