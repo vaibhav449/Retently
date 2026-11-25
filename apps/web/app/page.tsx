@@ -17,6 +17,9 @@ export default function Home() {
         <Link href="/review" className="underline underline-offset-4">
           Review
         </Link>
+        <Link href="/exams" className="underline underline-offset-4">
+          Exams
+        </Link>
       </nav>
       <Suspense fallback={<p className="text-muted-foreground text-sm">Loading your account…</p>}>
         <Account />

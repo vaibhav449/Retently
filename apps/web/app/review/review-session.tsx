@@ -6,6 +6,7 @@ import {
   type McqOption,
   type ReviewCategory,
   type ReviewItemView,
+  type ReviewReason,
   type ReviewResult,
   type ReviewSessionView,
   reviewAnswerResponseSchema,
@@ -14,9 +15,10 @@ import {
   type SessionProgress,
 } from "@repo/contracts";
 import { Check, X } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -40,8 +42,9 @@ const CATEGORY_LABELS: Record<ReviewCategory, string> = {
 };
 
 /**
- * "Why am I seeing this?" by category (06-queue-ranker.md §10). The server ranks each entry by its
- * features, but the contract does not carry the reason yet (QD-13), so the category speaks for it.
+ * "Why am I seeing this?" by category (06-queue-ranker.md §10). The server sends the reason of
+ * each question too (QD-13); its exam line replaces these when an upcoming exam ranked the
+ * question highest (07 §4, EM-11).
  */
 const WHY: Record<ReviewCategory, string> = {
   new: "A new question from your notes.",
@@ -70,6 +73,8 @@ type SessionState =
       name: "question";
       view: ReviewItemView;
       progress: SessionProgress;
+      /** Why this question is in today's plan, when the server says. */
+      reason: ReviewReason | null;
       /** Today's plan, for the time left; null if it could not be loaded. */
       plan: ReviewSessionView | null;
     }
@@ -87,7 +92,13 @@ async function loadNext(signal?: AbortSignal): Promise<SessionState | "signed_ou
     if (next.state === "nothing_due") return { name: "nothing_due" };
     if (next.state === "done_for_today")
       return { name: "done_for_today", canExtend: next.can_extend };
-    return { name: "question", view: next.item, progress: next.progress, plan: null };
+    return {
+      name: "question",
+      view: next.item,
+      progress: next.progress,
+      reason: next.reason ?? null,
+      plan: null,
+    };
   } catch (error) {
     if (!signal?.aborted) console.error(error);
     return { name: "failed" };
@@ -172,6 +183,7 @@ export function ReviewSession() {
           key={session.view.presentation_token}
           view={session.view}
           progress={session.progress}
+          reason={session.reason}
           remainingSec={session.plan?.remaining_sec ?? null}
           onNext={showNext}
           onSignedOut={() => router.replace("/login")}
@@ -183,17 +195,30 @@ export function ReviewSession() {
           New questions show up here once they are generated from your notes.
         </Notice>
       );
-    case "done_for_today":
+    case "done_for_today": {
+      const planExam = (
+        <Link href="/exams" className={buttonVariants({ variant: "outline" })}>
+          Plan for an exam
+        </Link>
+      );
       return session.canExtend ? (
         <Notice
           title="Done for today"
-          action={<Button onClick={() => void studyMore()}>Study more</Button>}
+          action={
+            <>
+              <Button onClick={() => void studyMore()}>Study more</Button>
+              {planExam}
+            </>
+          }
         >
           You finished today&apos;s plan. There is more you could review.
         </Notice>
       ) : (
-        <Notice title="Done for today">Come back tomorrow for your next reviews.</Notice>
+        <Notice title="Done for today" action={planExam}>
+          Come back tomorrow for your next reviews.
+        </Notice>
       );
+    }
     case "failed":
       return (
         <div className="flex flex-col items-start gap-3">
@@ -224,6 +249,7 @@ type AnswerState =
 interface QuestionCardProps {
   view: ReviewItemView;
   progress: SessionProgress;
+  reason: ReviewReason | null;
   /** Planned seconds left in today's plan, this question included; null when unknown. */
   remainingSec: number | null;
   onNext: () => void;
@@ -234,7 +260,14 @@ interface QuestionCardProps {
  * D-14: the stem and the options show together, the options stay disabled until a confidence is
  * picked, and latency runs from first render to submit.
  */
-function QuestionCard({ view, progress, remainingSec, onNext, onSignedOut }: QuestionCardProps) {
+function QuestionCard({
+  view,
+  progress,
+  reason,
+  remainingSec,
+  onNext,
+  onSignedOut,
+}: QuestionCardProps) {
   const [confidence, setConfidence] = useState<Confidence | null>(null);
   const [answer, setAnswer] = useState<AnswerState>({ name: "unanswered" });
   const shownAt = useRef(0);
@@ -311,7 +344,9 @@ function QuestionCard({ view, progress, remainingSec, onNext, onSignedOut }: Que
             <> · about {Math.max(1, Math.round(remainingSec / 60))} min left</>
           )}
         </CardDescription>
-        <p className="text-muted-foreground text-xs">{WHY[view.category]}</p>
+        <p className="text-muted-foreground text-xs">
+          {reason?.kind === "exam" ? reason.message : WHY[view.category]}
+        </p>
         <CardTitle className="text-lg">
           <h2>{view.item.prompt}</h2>
         </CardTitle>
@@ -505,7 +540,7 @@ function Notice({
         <CardTitle>{title}</CardTitle>
         <CardDescription>{children}</CardDescription>
       </CardHeader>
-      {action && <CardFooter>{action}</CardFooter>}
+      {action && <CardFooter className="flex-wrap gap-2">{action}</CardFooter>}
     </Card>
   );
 }
