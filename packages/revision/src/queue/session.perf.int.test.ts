@@ -10,6 +10,8 @@ import { getOrCreateSession } from "./session";
  * 150 ms "on CI hardware". The budget is asserted on CI; elsewhere (a laptop running Postgres in
  * Docker) the timings are printed and only a loose guard applies, unless QUEUE_BUILD_BUDGET_MS
  * sets one. Its own database, so 10 000 cards neither slow nor disturb the other test files.
+ * Runs alone (`npm run test:perf`, a CI step of its own), not in `npm run test:integration`: on a
+ * shared runner, the integration suites running beside it pushed the median past the budget.
  */
 const BUDGET_MS = Number(process.env.QUEUE_BUILD_BUDGET_MS ?? (process.env.CI ? 150 : 1_000));
 

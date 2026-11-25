@@ -6,7 +6,7 @@ import {
 } from "@repo/contracts";
 import { type Database, itemsReadableBy } from "@repo/db";
 import type { SchedulerRegistry } from "@repo/scheduler";
-import type { QueueConfig } from "../config";
+import { type QueueConfig, SESSION_TRANSACTION_OPTIONS } from "../config";
 import { type LatencyMedianSource, latencyMediansFromDb } from "../grading/latency";
 import type { GradingConfig } from "../grading/mapping";
 import { effectiveDueAt } from "../misconception";
@@ -171,7 +171,7 @@ export async function getOrCreateSession(userId: string, deps: SessionDeps): Pro
           })
         : await tx.reviewSession.update({ where: { id: row.id }, data });
     return parseSession(saved);
-  });
+  }, SESSION_TRANSACTION_OPTIONS);
   return today(session);
 }
 
@@ -340,7 +340,7 @@ export async function extendSession(userId: string, deps: SessionDeps): Promise<
       where: { id: row.id },
       data: { plan: [...row.plan, ...entries], meta, extendedCount: ext },
     });
-  });
+  }, SESSION_TRANSACTION_OPTIONS);
   return sessionView(userId, deps);
 }
 
