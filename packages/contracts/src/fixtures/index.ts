@@ -5,6 +5,7 @@
  */
 import type { Citation } from "../citation";
 import type { GenerateQuestionsQueuedResponse } from "../document";
+import type { Exam, ExamForecast, ExamInput, ExamListResponse, ExamUpdate } from "../exam";
 import type { ClozeItem, McqItem, ShortAnswerItem } from "../item";
 import type { IngestCompletedEvent, IngestFailedEvent, IngestRequestedJob } from "../jobs";
 import type { RealtimeTokenResponse } from "../realtime";
@@ -127,6 +128,17 @@ export const reviewNextOkFixture: ReviewNextResponse = {
   state: "ok",
   item: reviewItemViewFixture,
   progress: { done: 3, planned: 30 },
+};
+
+/** The same question, ranked into today's plan by an upcoming exam. */
+export const reviewNextOkExamFixture: ReviewNextResponse = {
+  state: "ok",
+  item: reviewItemViewFixture,
+  progress: { done: 3, planned: 30 },
+  reason: {
+    kind: "exam",
+    message: "Your exam is in 5 days and your predicted recall here is 74%.",
+  },
 };
 
 export const reviewNextDoneFixture: ReviewNextResponse = {
@@ -256,4 +268,192 @@ export const ingestFailedEventFixture: IngestFailedEvent = {
 export const realtimeTokenResponseFixture: RealtimeTokenResponse = {
   token: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyXzEifQ.signature",
   expires_in: 300,
+};
+
+const EXAM_ID = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+const PAST_EXAM_ID = "1b2c3d4e-5f6a-4b7c-9d8e-0f1a2b3c4d5e";
+const NOTE_KEY = `src:${NOTE_SOURCE_ID}`;
+const PDF_KEY = `src:${PDF_SOURCE_ID}`;
+const DELETED_NOTE_KEY = "src:2c3d4e5f-6a7b-4c8d-8e9f-0a1b2c3d4e5f";
+
+/** A Biology exam in two weeks, covering one note and one PDF, at the default target. */
+export const examInputFixture: ExamInput = {
+  exam_date: "2026-12-03",
+  topic_keys: [NOTE_KEY, PDF_KEY],
+  target_retention: 0.9,
+};
+
+/** Raising the target for a high-stakes exam. */
+export const examUpdateFixture: ExamUpdate = { target_retention: 0.95 };
+
+export const examFixture: Exam = {
+  id: EXAM_ID,
+  exam_date: "2026-12-03",
+  topic_keys: [NOTE_KEY, PDF_KEY],
+  target_retention: 0.9,
+  days_left: 14,
+  status: "upcoming",
+  scope: [
+    { key: NOTE_KEY, title: "Biology — Cell structure" },
+    { key: PDF_KEY, title: "NCERT Biology Class 11 — Chapter 13" },
+  ],
+  created_at: "2026-11-19T04:30:00.000Z",
+};
+
+/** Upcoming first, then (with ?include_past=1) a past exam whose second note was deleted since. */
+export const examListResponseFixture: ExamListResponse = {
+  exams: [
+    examFixture,
+    {
+      id: PAST_EXAM_ID,
+      exam_date: "2026-11-02",
+      topic_keys: [NOTE_KEY, DELETED_NOTE_KEY],
+      target_retention: 0.95,
+      days_left: -17,
+      status: "past",
+      scope: [
+        { key: NOTE_KEY, title: "Biology — Cell structure" },
+        { key: DELETED_NOTE_KEY, title: null },
+      ],
+      created_at: "2026-10-20T10:00:00.000Z",
+    },
+  ],
+};
+
+const FORECAST_ASSUMPTIONS = [
+  "Every review is graded Good.",
+  "Reviews come before new questions, the weakest first.",
+  "One review per question per day, at midday.",
+  "No reviews on exam day.",
+  "All your daily review slots go to this exam.",
+  "Lapse allowance: 12% extra reviews, from your own recent mistakes.",
+];
+
+/**
+ * 07-exam-mode.md §5.4's synthetic set: 100 questions, 60 already learned, 40 never seen, exam in
+ * 14 days. Ten reviews a day get all 100 to 90 %; twelve allow for a 12 % lapse rate.
+ */
+export const examForecastOnTrackFixture: ExamForecast = {
+  exam: {
+    id: EXAM_ID,
+    exam_date: "2026-12-03",
+    days_left: 14,
+    target_retention: 0.9,
+    topic_keys: [NOTE_KEY, PDF_KEY],
+  },
+  items: { total: 100, seen: 60, unseen: 40 },
+  if_nothing_more: {
+    at_target: 15,
+    mean_r_exam: 0.51,
+    histogram: [40, 0, 0, 0, 2, 6, 12, 14, 11, 15],
+  },
+  plan: {
+    feasible: true,
+    required_per_day: 10,
+    recommended_per_day: 12,
+    minutes_per_day: 6,
+    per_day: [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 5, 7, 9, 5],
+    at_target_with_plan: 100,
+    mean_r_exam_with_plan: 0.95,
+    histogram: [0, 0, 0, 0, 0, 0, 0, 0, 0, 100],
+  },
+  at_current_pace: { slots_per_day: 30, at_target: 100, mean_r_exam: 0.96 },
+  status: "on_track",
+  headline: { status: "on_track", n: 100, total: 100, target_pct: 90, date: "2026-12-03" },
+  assumptions: FORECAST_ASSUMPTIONS,
+  approximate: false,
+  scheduler_version: "fsrs6-v1",
+  lapse_rate: 0.12,
+  computed_at: "2026-11-19T04:30:00.000Z",
+};
+
+/** Eleven slots a day: enough for the plan, not for the lapse allowance. */
+export const examForecastTightFixture: ExamForecast = {
+  ...examForecastOnTrackFixture,
+  at_current_pace: { slots_per_day: 11, at_target: 100, mean_r_exam: 0.95 },
+  status: "tight",
+  headline: { status: "tight", required: 10, recommended: 12 },
+};
+
+/** Five slots a day: 07 §5.4's "capacity 5" row. */
+export const examForecastBehindFixture: ExamForecast = {
+  ...examForecastOnTrackFixture,
+  at_current_pace: { slots_per_day: 5, at_target: 72, mean_r_exam: 0.72 },
+  status: "behind",
+  headline: { status: "behind", slots: 5, n: 72, total: 100, target_pct: 90, minutes: 6 },
+};
+
+/** The exam is tomorrow: one study day cannot bring 40 new questions to 90 %. */
+export const examForecastInfeasibleFixture: ExamForecast = {
+  ...examForecastOnTrackFixture,
+  exam: { ...examForecastOnTrackFixture.exam, exam_date: "2026-11-20", days_left: 1 },
+  if_nothing_more: {
+    at_target: 48,
+    mean_r_exam: 0.56,
+    histogram: [40, 0, 0, 0, 0, 0, 0, 2, 10, 48],
+  },
+  plan: {
+    feasible: false,
+    required_per_day: null,
+    recommended_per_day: null,
+    minutes_per_day: null,
+    per_day: [100],
+    at_target_with_plan: 60,
+    mean_r_exam_with_plan: 0.95,
+    histogram: [0, 0, 0, 0, 0, 0, 0, 0, 40, 60],
+  },
+  at_current_pace: { slots_per_day: 30, at_target: 52, mean_r_exam: 0.68 },
+  status: "infeasible",
+  headline: { status: "infeasible", n: 60, total: 100, target_pct: 90, date: "2026-11-20" },
+};
+
+/** A past exam: no plan, only where recall stood on the day. */
+export const examForecastPassedFixture: ExamForecast = {
+  ...examForecastOnTrackFixture,
+  exam: {
+    id: PAST_EXAM_ID,
+    exam_date: "2026-11-02",
+    days_left: -17,
+    target_retention: 0.95,
+    topic_keys: [NOTE_KEY],
+  },
+  items: { total: 12, seen: 12, unseen: 0 },
+  if_nothing_more: {
+    at_target: 7,
+    mean_r_exam: 0.93,
+    histogram: [0, 0, 0, 0, 0, 0, 0, 0, 3, 9],
+  },
+  plan: {
+    feasible: false,
+    required_per_day: null,
+    recommended_per_day: null,
+    minutes_per_day: null,
+    per_day: [],
+    at_target_with_plan: 7,
+    mean_r_exam_with_plan: 0.93,
+    histogram: [0, 0, 0, 0, 0, 0, 0, 0, 3, 9],
+  },
+  at_current_pace: { slots_per_day: 30, at_target: 7, mean_r_exam: 0.93 },
+  status: "exam_passed",
+  headline: { status: "exam_passed", date: "2026-11-02" },
+};
+
+/** The exam's notes have no questions yet. */
+export const examForecastNoItemsFixture: ExamForecast = {
+  ...examForecastOnTrackFixture,
+  items: { total: 0, seen: 0, unseen: 0 },
+  if_nothing_more: { at_target: 0, mean_r_exam: 0, histogram: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  plan: {
+    feasible: true,
+    required_per_day: null,
+    recommended_per_day: null,
+    minutes_per_day: null,
+    per_day: [],
+    at_target_with_plan: 0,
+    mean_r_exam_with_plan: 0,
+    histogram: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  },
+  at_current_pace: { slots_per_day: 30, at_target: 0, mean_r_exam: 0 },
+  status: "no_items",
+  headline: { status: "no_items" },
 };

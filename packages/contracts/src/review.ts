@@ -56,9 +56,30 @@ export const sessionProgressSchema = z.object({
   planned: z.number().int().nonnegative(),
 });
 
+/** Which feature ranked an item highest in today's plan (06-queue-ranker.md §10). */
+export const reviewReasonKindSchema = z.enum([
+  "misconception",
+  "overdue",
+  "exam",
+  "weakness",
+  "coverage",
+]);
+
+/** "Why am I seeing this?": the largest contributor to the item's priority, as one sentence. */
+export const reviewReasonSchema = z.strictObject({
+  kind: reviewReasonKindSchema,
+  message: z.string().min(1),
+});
+
 /** GET /api/review/next. */
 export const reviewNextResponseSchema = z.discriminatedUnion("state", [
-  z.object({ state: z.literal("ok"), item: reviewItemViewSchema, progress: sessionProgressSchema }),
+  z.object({
+    state: z.literal("ok"),
+    item: reviewItemViewSchema,
+    progress: sessionProgressSchema,
+    /** Optional, so a client built before it still parses the response (QD-13). */
+    reason: reviewReasonSchema.optional(),
+  }),
   /** Today's plan is finished; `can_extend` offers "study more". */
   z.object({ state: z.literal("done_for_today"), can_extend: z.boolean() }),
   /** Nothing is due today and there are no new items. */
@@ -125,7 +146,10 @@ export const reviewSessionViewSchema = z.object({
     misconception: z.number().int().nonnegative(),
     new: z.number().int().nonnegative(),
   }),
+  /** The exams the plan was built for (07-exam-mode.md §4). */
   exam_ids: z.array(z.uuid()),
+  /** More was due than fits the budget, so no new questions today (06 §6). Optional (QD-13). */
+  backlog: z.boolean().optional(),
 });
 
 export type Confidence = z.infer<typeof confidenceSchema>;
@@ -135,6 +159,8 @@ export type ReviewGrade = z.infer<typeof gradeSchema>;
 export type ReviewResponse = z.infer<typeof reviewResponseSchema>;
 export type ReviewItemView = z.infer<typeof reviewItemViewSchema>;
 export type SessionProgress = z.infer<typeof sessionProgressSchema>;
+export type ReviewReasonKind = z.infer<typeof reviewReasonKindSchema>;
+export type ReviewReason = z.infer<typeof reviewReasonSchema>;
 export type ReviewNextResponse = z.infer<typeof reviewNextResponseSchema>;
 export type ReviewAnswerRequest = z.infer<typeof reviewAnswerRequestSchema>;
 export type ReviewResult = z.infer<typeof reviewResultSchema>;

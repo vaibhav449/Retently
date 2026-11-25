@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { z } from "zod";
 import { citationSchema } from "./citation";
 import { generateQuestionsQueuedResponseSchema } from "./document";
+import {
+  examForecastSchema,
+  examInputSchema,
+  examListResponseSchema,
+  examSchema,
+  examUpdateSchema,
+} from "./exam";
 import * as fixtures from "./fixtures";
 import { itemSchema, mcqItemSchema } from "./item";
 import {
@@ -29,6 +36,7 @@ const cases: [string, z.ZodType, unknown][] = [
   ["pdfCitationFixture", citationSchema, fixtures.pdfCitationFixture],
   ["reviewItemViewFixture", reviewItemViewSchema, fixtures.reviewItemViewFixture],
   ["reviewNextOkFixture", reviewNextResponseSchema, fixtures.reviewNextOkFixture],
+  ["reviewNextOkExamFixture", reviewNextResponseSchema, fixtures.reviewNextOkExamFixture],
   ["reviewNextDoneFixture", reviewNextResponseSchema, fixtures.reviewNextDoneFixture],
   ["reviewNextNothingDueFixture", reviewNextResponseSchema, fixtures.reviewNextNothingDueFixture],
   ["reviewAnswerRequestFixture", reviewAnswerRequestSchema, fixtures.reviewAnswerRequestFixture],
@@ -60,6 +68,16 @@ const cases: [string, z.ZodType, unknown][] = [
     realtimeTokenResponseSchema,
     fixtures.realtimeTokenResponseFixture,
   ],
+  ["examInputFixture", examInputSchema, fixtures.examInputFixture],
+  ["examUpdateFixture", examUpdateSchema, fixtures.examUpdateFixture],
+  ["examFixture", examSchema, fixtures.examFixture],
+  ["examListResponseFixture", examListResponseSchema, fixtures.examListResponseFixture],
+  ["examForecastOnTrackFixture", examForecastSchema, fixtures.examForecastOnTrackFixture],
+  ["examForecastTightFixture", examForecastSchema, fixtures.examForecastTightFixture],
+  ["examForecastBehindFixture", examForecastSchema, fixtures.examForecastBehindFixture],
+  ["examForecastInfeasibleFixture", examForecastSchema, fixtures.examForecastInfeasibleFixture],
+  ["examForecastPassedFixture", examForecastSchema, fixtures.examForecastPassedFixture],
+  ["examForecastNoItemsFixture", examForecastSchema, fixtures.examForecastNoItemsFixture],
 ];
 
 describe("fixtures", () => {
@@ -152,5 +170,20 @@ describe("review rules", () => {
 
   it("rejects the old 'nothing due' shape, which could not tell done from empty", () => {
     expect(reviewNextResponseSchema.safeParse({ item: null }).success).toBe(false);
+  });
+
+  it("parses a response without the optional reason, and refuses an unknown reason kind", () => {
+    expect(reviewNextResponseSchema.safeParse(fixtures.reviewNextOkFixture).success).toBe(true);
+    const unknown = {
+      ...fixtures.reviewNextOkExamFixture,
+      reason: { kind: "luck", message: "Just because." },
+    };
+    expect(reviewNextResponseSchema.safeParse(unknown).success).toBe(false);
+  });
+
+  it("parses a session view with or without the optional backlog flag", () => {
+    const withBacklog = { ...fixtures.reviewSessionViewFixture, backlog: true };
+    expect(reviewSessionViewSchema.safeParse(withBacklog).success).toBe(true);
+    expect(reviewSessionViewSchema.safeParse(fixtures.reviewSessionViewFixture).success).toBe(true);
   });
 });
